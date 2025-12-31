@@ -7,6 +7,8 @@
 
 ## [未リリース]
 
+## [1.0.1] - 2026-01-01
+
 ### 変更
 
 - **@Statable マクロ**: `public init()` の自動生成を削除
@@ -48,7 +50,8 @@
 - README.md（日本語・英語）
 - RELEASE_PROCESS.md
 
-[未リリース]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.0...HEAD
+[未リリース]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/no-problem-dev/swift-statable/releases/tag/v1.0.0
 
 <!-- Auto-generated on 2025-12-31T22:22:38Z by release workflow -->
