@@ -26,9 +26,6 @@ final class StatableMacroTests: XCTestCase {
                 @ObservationIgnored
                 private let _asyncValue = AsyncValue<Profile>()
 
-                public init() {
-                }
-
                 /// 現在の値
                 public var value: Profile? {
                     _asyncValue.value
@@ -107,22 +104,18 @@ final class StatableMacroTests: XCTestCase {
         )
     }
 
-    func testStatableDoesNotGenerateInitIfExists() throws {
+    func testStatablePreservesUserDefinedInit() throws {
         assertMacroExpansion(
             """
             @Statable(Profile.self)
             final class ProfileStore {
-                init() {
-                    print("custom init")
-                }
+                public init() {}
             }
             """,
             expandedSource: """
 
             final class ProfileStore {
-                init() {
-                    print("custom init")
-                }
+                public init() {}
 
                 @ObservationIgnored
                 private let _asyncValue = AsyncValue<Profile>()
@@ -219,9 +212,6 @@ final class StatableMacroTests: XCTestCase {
                 @ObservationIgnored
                 private let _asyncValue = AsyncValue<Module.Profile>()
 
-                public init() {
-                }
-
                 /// 現在の値
                 public var value: Module.Profile? {
                     _asyncValue.value
@@ -316,9 +306,6 @@ final class StatableMacroTests: XCTestCase {
 
                 @ObservationIgnored
                 private let _operations = OperationTracker<Op>()
-
-                public init() {
-                }
 
                 /// 現在の値
                 public var value: [Activity]? {

@@ -33,14 +33,6 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
         let valueType = args.valueType
         let operationType = args.operationType
 
-        // 既存のinitがあるか確認
-        let hasExistingInit = declaration.memberBlock.members.contains { member in
-            if let initDecl = member.decl.as(InitializerDeclSyntax.self) {
-                return initDecl.signature.parameterClause.parameters.isEmpty
-            }
-            return false
-        }
-
         var members: [DeclSyntax] = []
 
         // 1. 内部 AsyncValue ストレージ
@@ -61,17 +53,7 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
             )
         }
 
-        // 3. init（既存がなければ生成）
-        if !hasExistingInit {
-            members.append(
-                """
-                public init() {
-                }
-                """
-            )
-        }
-
-        // 4. Computed Properties (パススルー)
+        // 3. Computed Properties (パススルー)
         members.append(contentsOf: [
             """
             /// 現在の値
@@ -117,7 +99,7 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
             """,
         ])
 
-        // 5. Operations プロパティ（operationType指定時のみ）
+        // 4. Operations プロパティ（operationType指定時のみ）
         if let opType = operationType {
             members.append(
                 """
@@ -129,7 +111,7 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
             )
         }
 
-        // 6. Methods (パススルー)
+        // 5. Methods (パススルー)
         members.append(contentsOf: [
             """
             /// 値を設定（loaded状態に遷移）

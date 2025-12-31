@@ -77,14 +77,14 @@
 ///     try await api.record(workout)
 /// }
 /// ```
-@attached(member, names: named(_asyncValue), named(_operations), named(init), named(value), named(state), named(isLoading), named(isIdle), named(isFailed), named(hasValue), named(error), named(operations), named(set), named(setError), named(startLoading), named(reset), named(load), named(loadIfNeeded), named(reload))
+@attached(member, names: named(_asyncValue), named(_operations), named(value), named(state), named(isLoading), named(isIdle), named(isFailed), named(hasValue), named(error), named(operations), named(set), named(setError), named(startLoading), named(reset), named(load), named(loadIfNeeded), named(reload))
 @attached(extension, conformances: Statable, Sendable)
 public macro Statable<T: Sendable>(
     _ valueType: T.Type
 ) = #externalMacro(module: "StatableMacros", type: "StatableMacro")
 
 /// 操作トラッキング付きの@Statable
-@attached(member, names: named(_asyncValue), named(_operations), named(init), named(value), named(state), named(isLoading), named(isIdle), named(isFailed), named(hasValue), named(error), named(operations), named(set), named(setError), named(startLoading), named(reset), named(load), named(loadIfNeeded), named(reload))
+@attached(member, names: named(_asyncValue), named(_operations), named(value), named(state), named(isLoading), named(isIdle), named(isFailed), named(hasValue), named(error), named(operations), named(set), named(setError), named(startLoading), named(reset), named(load), named(loadIfNeeded), named(reload))
 @attached(extension, conformances: Statable, Sendable)
 public macro Statable<T: Sendable, Op: Hashable & Sendable>(
     _ valueType: T.Type,

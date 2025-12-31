@@ -27,9 +27,8 @@ import Statable
 @Statable(MetabolicProfile.self)
 @MainActor @Observable
 final class ProfileStore {
-    // Macro auto-generates value, state, isLoading, etc.
+    public init() {}
 
-    // Custom computed properties
     var currentAge: Int { value?.age() ?? 0 }
 }
 
@@ -41,7 +40,7 @@ enum WorkoutOperation: String, CaseIterable, Sendable {
 @Statable([WorkoutActivity].self, operations: WorkoutOperation.self)
 @MainActor @Observable
 final class WorkoutStore {
-    // Auto-generates value, state, operations, etc.
+    public init() {}
 
     var isRecording: Bool {
         operations.isActive(.recordStrength) || operations.isActive(.recordCardio)
