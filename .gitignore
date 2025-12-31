@@ -1,0 +1,46 @@
+# Xcode
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# Build
+build/
+DerivedData/
+.build/
+
+# App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+# Package.swift
+Package.resolved
+.swiftpm/
+
+# Carthage
+Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output/
+
+# CocoaPods (optional)
+# Pods/
+
+# iOS Injection
+iOSInjectionProject/
+
+# macOS
+.DS_Store
+
+# iCloud
+CloudDocs/
+
+# DocC output
+docs/
+
+# Claude Code
+.claude/
