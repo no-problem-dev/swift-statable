@@ -24,6 +24,7 @@ final class TrackMacroTests: XCTestCase {
                 }
             }
 
+            @ObservationIgnored
             private let _operations = OperationTracker<Operation>()
             """,
             macros: trackMacros
@@ -42,6 +43,7 @@ final class TrackMacroTests: XCTestCase {
                 }
             }
 
+            @ObservationIgnored
             private let _ops = OperationTracker<WorkoutStore.Operation>()
             """,
             macros: trackMacros
