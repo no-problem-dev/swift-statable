@@ -256,6 +256,10 @@ public struct StateError: Error, Equatable, Sendable {
 
 `loading(previous: Value?)` により、リロード中も前回の値を表示し続けることができ、UXが向上します。
 
+## ドキュメント
+
+詳細なAPIドキュメントは [GitHub Pages](https://no-problem-dev.github.io/swift-statable/documentation/statable/) で確認できます。
+
 ## 依存関係
 
 | パッケージ | 用途 |

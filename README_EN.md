@@ -256,6 +256,10 @@ The `AsyncState` enum represents exclusive states, preventing contradictory stat
 
 `loading(previous: Value?)` allows displaying the previous value during reload, improving UX.
 
+## Documentation
+
+Detailed API documentation is available on [GitHub Pages](https://no-problem-dev.github.io/swift-statable/documentation/statable/).
+
 ## Dependencies
 
 | Package | Purpose |
