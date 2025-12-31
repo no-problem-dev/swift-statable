@@ -27,7 +27,7 @@ import Statable
 @Statable(MetabolicProfile.self)
 @MainActor @Observable
 final class ProfileStore {
-    // マクロが value, state, isLoading などを自動生成
+    public init() {}
 
     // カスタムcomputed properties
     var currentAge: Int { value?.age() ?? 0 }
@@ -41,7 +41,7 @@ enum WorkoutOperation: String, CaseIterable, Sendable {
 @Statable([WorkoutActivity].self, operations: WorkoutOperation.self)
 @MainActor @Observable
 final class WorkoutStore {
-    // value, state, operations などが自動生成
+    public init() {}
 
     var isRecording: Bool {
         operations.isActive(.recordStrength) || operations.isActive(.recordCardio)
