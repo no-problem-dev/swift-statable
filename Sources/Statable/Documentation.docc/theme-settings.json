@@ -1,0 +1,23 @@
+{
+    "theme": {
+        "color": {
+            "standard-blue": "#007AFF",
+            "standard-green": "#34C759",
+            "standard-purple": "#AF52DE"
+        },
+        "typography": {
+            "html-font": "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
+            "html-font-mono": "'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+        },
+        "features": {
+            "docs": {
+                "quickNavigation": {
+                    "enable": true
+                },
+                "i18n": {
+                    "enable": true
+                }
+            }
+        }
+    }
+}
