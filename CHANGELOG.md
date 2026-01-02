@@ -7,6 +7,17 @@
 
 ## [未リリース]
 
+なし
+
+## [1.0.2] - 2026-01-02
+
+### 変更
+
+- **Swift 6.2 対応**: Swift 6.2 安定版に対応
+  - `swift-tools-version`: 6.0 → 6.2
+  - `swift-syntax`: 600.0.0 → 602.0.0
+  - 依存関係指定を `.upToNextMajor` に統一
+
 ## [1.0.1] - 2026-01-01
 
 ### 変更
@@ -50,7 +61,8 @@
 - README.md（日本語・英語）
 - RELEASE_PROCESS.md
 
-[未リリース]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.1...HEAD
+[未リリース]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/no-problem-dev/swift-statable/releases/tag/v1.0.0
 
