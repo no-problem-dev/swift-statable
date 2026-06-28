@@ -33,6 +33,7 @@ jobs:
         run: |
           swift package --allow-writing-to-directory ./docs \
             generate-documentation \
+            --enable-experimental-combined-documentation \
             --target Statable \
             --disable-indexing \
             --transform-for-static-hosting \
