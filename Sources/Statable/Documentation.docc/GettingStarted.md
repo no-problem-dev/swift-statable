@@ -106,7 +106,7 @@ struct ProfileView: View {
 
             case .failed(let error):
                 VStack {
-                    Text("エラー: \(error.message)")
+                    Text("エラー: \(error.localizedMessage)")
                     Button("再試行") {
                         Task { await store.reload { try await api.fetchProfile() } }
                     }

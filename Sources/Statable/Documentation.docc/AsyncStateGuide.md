@@ -66,7 +66,7 @@ case .loaded(let profile):
 case .failed(let error):
     VStack {
         Image(systemName: "exclamationmark.triangle")
-        Text(error.message)
+        Text(error.localizedMessage)
         Button("再試行") {
             Task { await store.reload { ... } }
         }
@@ -98,7 +98,7 @@ case .failed(let error):
 store.set(newProfile)
 
 // エラーを設定（failed状態に遷移）
-store.setError(StateError(code: "NOT_FOUND", message: "見つかりません"))
+store.setError(.notFound(resource: "プロファイル"))
 
 // ローディング開始（loading状態に遷移）
 store.startLoading()

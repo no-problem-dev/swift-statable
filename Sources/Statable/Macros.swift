@@ -90,3 +90,43 @@ public macro Statable<T: Sendable, Op: Hashable & Sendable>(
     _ valueType: T.Type,
     operations operationType: Op.Type
 ) = #externalMacro(module: "StatableMacros", type: "StatableMacro")
+
+// MARK: - @Track Macro
+
+/// ストアに独立した操作トラッカーを追加するマクロ
+///
+/// `@Statable` クラスの変数宣言に適用することで、`OperationTracker<Op>` の
+/// ストレージと getter を自動生成します。
+///
+/// ## 基本的な使い方
+///
+/// ```swift
+/// @Statable(UserProfile.self)
+/// @MainActor @Observable
+/// final class ProfileStore {
+///     enum Operation: Hashable, Sendable {
+///         case fetch
+///         case update
+///     }
+///
+///     @Track(Operation.self) var operations
+/// }
+///
+/// // 使用側
+/// if store.operations.isActive(.fetch) {
+///     ProgressView()
+/// }
+/// await store.operations.run(.fetch) {
+///     try await api.fetchProfile()
+/// }
+/// ```
+///
+/// ## 生成されるメンバー
+///
+/// - `private let _<name> = OperationTracker<Op>()` — 内部ストレージ
+/// - `var <name>: OperationTracker<Op> { get }` — 読み取り専用アクセサ
+@attached(accessor, names: named(get))
+@attached(peer, names: prefixed(_))
+public macro Track<Op: Hashable & Sendable>(
+    _ operationType: Op.Type
+) = #externalMacro(module: "StatableMacros", type: "TrackMacro")

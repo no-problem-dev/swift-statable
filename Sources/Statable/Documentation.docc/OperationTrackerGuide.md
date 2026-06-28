@@ -68,15 +68,17 @@ case .failure(let error):
 }
 ```
 
-### AsyncValueとの連携
+### 結果を値に反映する
 
-`run(_:into:task:)`メソッドで、操作結果を直接AsyncValueに設定できます：
+`run` の戻り値（`Result<T, StateError>`）を使って、操作完了後に `store.set(_:)` で値を更新できます：
 
 ```swift
-await store.operations.run(.fetch, into: store._asyncValue) {
+let result = await store.operations.run(.fetch) {
     try await api.fetchItems()
 }
-// これにより、store.valueが自動的に更新される
+if case .success(let items) = result {
+    store.set(items)
+}
 ```
 
 ## 状態の確認
@@ -91,7 +93,7 @@ if store.operations.isActive(.save) {
 
 // 特定の操作のエラー
 if let error = store.operations.error(for: .fetch) {
-    Text("取得エラー: \(error.message)")
+    Text("取得エラー: \(error.localizedMessage)")
 }
 ```
 
@@ -112,7 +114,7 @@ for operation in store.operations.active {
 if store.operations.hasErrors {
     // エラー一覧を表示
     for (op, error) in store.operations.allErrors {
-        print("\(op): \(error.message)")
+        print("\(op): \(error.localizedMessage)")
     }
 }
 ```
@@ -168,8 +170,11 @@ struct TodoListView: View {
             }
         }
         .task {
-            await store.operations.run(.fetch, into: store._asyncValue) {
+            let result = await store.operations.run(.fetch) {
                 try await api.fetchTodos()
+            }
+            if case .success(let todos) = result {
+                store.set(todos)
             }
         }
     }
@@ -222,7 +227,7 @@ enum BadOperations {
 // 操作失敗時のリトライUI
 if let error = store.operations.error(for: .fetch) {
     VStack {
-        Text(error.message)
+        Text(error.localizedMessage)
         Button("再試行") {
             store.operations.clearError(for: .fetch)
             Task {

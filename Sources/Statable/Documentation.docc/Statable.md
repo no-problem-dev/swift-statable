@@ -61,7 +61,7 @@ struct ProfileView: View {
         case .loaded(let profile):
             Text("こんにちは、\(profile.name)さん")
         case .failed(let error):
-            Text("エラー: \(error.message)")
+            Text("エラー: \(error.localizedMessage)")
         }
     }
 }
@@ -95,4 +95,4 @@ struct ProfileView: View {
 
 ### プロトコル
 
-- ``StatableProtocol``
+- ``Statable-swift.protocol``

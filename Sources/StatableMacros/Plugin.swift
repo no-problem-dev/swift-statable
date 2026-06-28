@@ -5,5 +5,6 @@ import SwiftSyntaxMacros
 struct StatablePlugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
         StatableMacro.self,
+        TrackMacro.self,
     ]
 }
