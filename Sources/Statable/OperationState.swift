@@ -7,7 +7,8 @@ import Observation
 /// ## 使用例
 ///
 /// ```swift
-/// @Statable
+/// @Statable([WorkoutActivity].self)
+/// @MainActor @Observable
 /// final class WorkoutStore {
 ///     enum Operation: String, CaseIterable, Sendable {
 ///         case fetch
@@ -16,7 +17,6 @@ import Observation
 ///     }
 ///
 ///     @Track(Operation.self) var operations
-///     @Async var activities: [WorkoutActivity] = []
 /// }
 ///
 /// // 操作の開始・完了
@@ -41,6 +41,7 @@ public final class OperationTracker<Operation: Hashable & Sendable>: @unchecked 
 
     // MARK: - Initialization
 
+    /// 空の状態でトラッカーを作成
     public init() {}
 
     // MARK: - Operation Management

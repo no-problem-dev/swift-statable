@@ -1,17 +1,17 @@
 # OperationTracker ガイド
 
-複数の並行操作を個別に追跡する方法を学びます。
+複数の並行操作を個別に追跡する方法。
 
 ## Overview
 
-`OperationTracker<Op>`は、複数の並行操作を個別に追跡するための状態管理クラスです。
-例えば「データ取得中」と「保存中」を同時に追跡し、それぞれの状態に応じたUIを表示できます。
+`OperationTracker<Op>`は、複数の並行操作を個別に追跡するための状態管理クラス。
+例えば「データ取得中」と「保存中」を同時に追跡し、それぞれの状態に応じたUIを表示できる。
 
 ## 基本的な使い方
 
 ### 操作の定義
 
-まず、追跡したい操作をenumで定義します：
+追跡したい操作をenumで定義する：
 
 ```swift
 enum DataOperation: String, CaseIterable, Sendable {
@@ -23,7 +23,7 @@ enum DataOperation: String, CaseIterable, Sendable {
 
 ### Storeへの組み込み
 
-`@Statable`マクロの`operations`パラメータで操作型を指定します：
+`@Statable`マクロの`operations`パラメータで操作型を指定する：
 
 ```swift
 @Statable([Item].self, operations: DataOperation.self)
@@ -33,7 +33,7 @@ final class ItemStore {
 }
 ```
 
-これにより、`operations`プロパティが自動生成されます。
+これにより、`operations`プロパティが自動生成される。
 
 ## 操作ライフサイクル
 
@@ -52,7 +52,7 @@ store.operations.fail(.fetch, with: error)
 
 ### 自動管理（推奨）
 
-`run`メソッドを使用すると、開始・完了・失敗を自動的に管理できます：
+`run`メソッドを使用すると、開始・完了・失敗を自動的に管理できる：
 
 ```swift
 // 基本的な使い方
@@ -70,7 +70,7 @@ case .failure(let error):
 
 ### 結果を値に反映する
 
-`run` の戻り値（`Result<T, StateError>`）を使って、操作完了後に `store.set(_:)` で値を更新できます：
+`run` の戻り値（`Result<T, StateError>`）を使って、操作完了後に `store.set(_:)` で値を更新できる：
 
 ```swift
 let result = await store.operations.run(.fetch) {
@@ -203,7 +203,7 @@ await withTaskGroup(of: Void.self) { group in
 
 ### 操作の粒度
 
-操作は、UIで個別に状態を表示する必要があるかどうかで粒度を決めます：
+UIで個別に状態を表示する必要があるかどうかで粒度を決める：
 
 ```swift
 // 良い例：UIで個別に表示が必要

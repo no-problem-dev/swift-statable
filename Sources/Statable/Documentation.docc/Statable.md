@@ -77,6 +77,7 @@ struct ProfileView: View {
 
 - ``Statable(_:)``
 - ``Statable(_:operations:)``
+- ``Track(_:)``
 
 ### 状態管理
 
@@ -96,3 +97,6 @@ struct ProfileView: View {
 ### プロトコル
 
 - ``Statable-swift.protocol``
+- ``AsyncStateProvider``
+- ``OperationTrackable``
+- ``ActorIsolation``

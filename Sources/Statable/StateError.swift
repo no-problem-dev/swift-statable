@@ -131,6 +131,8 @@ extension StateError {
 
 extension NetworkError {
     /// ユーザー向けメッセージ
+    ///
+    /// - Returns: ネットワークエラーの種類に応じた日本語の説明文字列
     public var localizedMessage: String {
         switch self {
         case .timeout:
@@ -151,6 +153,8 @@ extension NetworkError {
 
 extension ValidationError {
     /// ユーザー向けメッセージ
+    ///
+    /// - Returns: バリデーションエラーの種類とフィールド名を含む日本語の説明文字列
     public var localizedMessage: String {
         switch self {
         case .invalidInput(let field, let reason):

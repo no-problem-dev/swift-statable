@@ -1,21 +1,21 @@
 # はじめに
 
-Statableを使って非同期状態を管理する基本的な方法を学びます。
+Statableを使って非同期状態を管理する基本的な方法を学ぶ。
 
 ## Overview
 
-Statableは、SwiftUIアプリケーションで非同期状態を型安全に管理するためのライブラリです。
-`@Statable`マクロにより、状態管理のボイラープレートを大幅に削減できます。
+StatableはSwiftUIアプリケーションで非同期状態を型安全に管理するライブラリ。
+`@Statable`マクロにより、状態管理のボイラープレートを大幅に削減できる。
 
 ## インストール
 
 ### Swift Package Manager
 
-`Package.swift`に以下を追加してください：
+`Package.swift`に以下を追加する：
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-statable.git", from: "1.0.0")
+    .package(url: "https://github.com/no-problem-dev/swift-statable.git", from: "1.0.2")
 ]
 ```
 
@@ -34,7 +34,7 @@ dependencies: [
 
 ### Storeの定義
 
-`@Statable`マクロを使用してStoreを定義します：
+`@Statable`マクロを使用してStoreを定義する：
 
 ```swift
 import Statable
@@ -46,7 +46,7 @@ final class ProfileStore {
 }
 ```
 
-このマクロにより、以下のプロパティとメソッドが自動生成されます：
+このマクロにより、以下のプロパティとメソッドが自動生成される：
 
 | プロパティ | 型 | 説明 |
 |----------|------|------|
@@ -119,7 +119,7 @@ struct ProfileView: View {
 
 ## 操作トラッキング
 
-複数の操作を個別に追跡する場合は、`operations`パラメータを使用します：
+複数の操作を個別に追跡する場合は、`operations`パラメータを使用する：
 
 ```swift
 enum DataOperation: String, CaseIterable, Sendable {
@@ -137,7 +137,7 @@ final class ItemStore {
 }
 ```
 
-詳細は <doc:OperationTrackerGuide> を参照してください。
+詳細は <doc:OperationTrackerGuide> 参照。
 
 ## 次のステップ
 

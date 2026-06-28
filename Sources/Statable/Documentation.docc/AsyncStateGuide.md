@@ -1,11 +1,11 @@
 # AsyncState ガイド
 
-排他的な非同期状態表現の詳細な使い方を学びます。
+排他的な非同期状態表現の詳細な使い方。
 
 ## Overview
 
-`AsyncState<T>`は、非同期でロードされる値の状態を排他的に表現するenumです。
-SSOT（Single Source of Truth）原則に基づき、1つのenumで全ての状態を排他的に表現します。
+`AsyncState<T>`は、非同期でロードされる値の状態を排他的に表現するenum。
+SSOT（Single Source of Truth）原則に基づき、1つのenumで全ての状態を排他的に表現する。
 
 ## 状態の種類
 
@@ -20,8 +20,8 @@ public enum AsyncState<Value: Sendable>: Sendable {
 
 ### idle - 初期状態
 
-まだデータがロードされていない状態です。アプリ起動直後や、
-明示的にリセットした後の状態がこれに該当します。
+まだデータがロードされていない状態。アプリ起動直後や、
+明示的にリセットした後がこれに該当する。
 
 ```swift
 if store.isIdle {
@@ -31,9 +31,9 @@ if store.isIdle {
 
 ### loading - ロード中
 
-データを取得中の状態です。`previous`パラメータにより、
-リロード時に前回の値を保持できます。これにより、
-ローディング中も前回のデータを表示し続けるUXが可能になります。
+データを取得中の状態。`previous`パラメータにより、
+リロード時に前回の値を保持できる。
+ローディング中も前回のデータを表示し続けるUXが可能。
 
 ```swift
 case .loading(let previous):
@@ -49,8 +49,7 @@ case .loading(let previous):
 
 ### loaded - ロード成功
 
-データの取得に成功した状態です。
-値に直接アクセスできます。
+データの取得に成功した状態。値に直接アクセスできる。
 
 ```swift
 case .loaded(let profile):
@@ -59,8 +58,7 @@ case .loaded(let profile):
 
 ### failed - ロード失敗
 
-エラーが発生した状態です。
-`StateError`にはエラーの詳細情報が含まれます。
+エラーが発生した状態。`StateError`にエラーの詳細情報を含む。
 
 ```swift
 case .failed(let error):
@@ -75,7 +73,7 @@ case .failed(let error):
 
 ## 便利なプロパティ
 
-`AsyncState`には状態を簡単に確認するためのプロパティがあります：
+`AsyncState`には状態を簡単に確認するためのプロパティがある：
 
 | プロパティ | 説明 |
 |----------|------|
@@ -88,8 +86,8 @@ case .failed(let error):
 
 ## AsyncValue
 
-`AsyncValue<T>`は、`AsyncState<T>`を内部で保持する`@Observable`なラッパークラスです。
-`@Statable`マクロはこれを内部で使用しています。
+`AsyncValue<T>`は、`AsyncState<T>`を内部で保持する`@Observable`なラッパークラス。
+`@Statable`マクロはこれを内部で使用する。
 
 ### 状態遷移メソッド
 
@@ -130,8 +128,7 @@ await store.reload {
 
 ### switch文での完全なハンドリング
 
-全ての状態を明示的にハンドリングすることで、
-状態の漏れを防ぎます：
+全ての状態を明示的にハンドリングすることで、状態の漏れを防ぐ：
 
 ```swift
 switch store.state {

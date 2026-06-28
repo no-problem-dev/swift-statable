@@ -1,39 +1,38 @@
 # Statable
 
-[English](README_EN.md) | 日本語
+English | [日本語](./README.ja.md)
 
-SwiftUI向けの宣言的な状態管理マクロ。AsyncValueパターンとOperationTrackerを組み合わせ、非同期状態を型安全に管理します。
+A declarative state management macro for SwiftUI. Combines the AsyncValue pattern with OperationTracker to manage asynchronous state in a type-safe manner.
 
 ![Swift 6.0+](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![iOS 17+](https://img.shields.io/badge/iOS-17+-blue.svg)
 ![macOS 14+](https://img.shields.io/badge/macOS-14+-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-## 特徴
+## Features
 
-- **宣言的なマクロ**: `@Statable` マクロで状態管理のボイラープレートを削減
-- **排他的状態表現**: `AsyncState<T>` enumで `.idle`, `.loading`, `.loaded`, `.failed` を型安全に表現
-- **操作トラッキング**: `OperationTracker` で複数の並行操作を個別に追跡
-- **@Observable統合**: SwiftUIの `@Observable` と完全に統合
-- **Sendable準拠**: Strict Concurrency対応
+- **Declarative Macro**: Reduce state management boilerplate with the `@Statable` macro
+- **Exclusive State Representation**: Type-safe expression of `.idle`, `.loading`, `.loaded`, `.failed` with `AsyncState<T>` enum
+- **Operation Tracking**: Track multiple concurrent operations individually with `OperationTracker`
+- **@Observable Integration**: Fully integrated with SwiftUI's `@Observable`
+- **Sendable Conformance**: Full Strict Concurrency support
 
-## クイックスタート
+## Quick Start
 
 ```swift
 import SwiftUI
 import Statable
 
-// シンプルなStore定義
+// Simple Store definition
 @Statable(MetabolicProfile.self)
 @MainActor @Observable
 final class ProfileStore {
     public init() {}
 
-    // カスタムcomputed properties
     var currentAge: Int { value?.age() ?? 0 }
 }
 
-// 操作トラッキング付きStore
+// Store with operation tracking
 enum WorkoutOperation: String, CaseIterable, Sendable {
     case fetch, recordStrength, recordCardio
 }
@@ -49,19 +48,19 @@ final class WorkoutStore {
 }
 ```
 
-## インストール
+## Installation
 
 ### Swift Package Manager
 
-`Package.swift` に以下を追加：
+Add the following to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-statable.git", from: "1.0.0")
+    .package(url: "https://github.com/no-problem-dev/swift-statable.git", from: "1.0.2")
 ]
 ```
 
-ターゲットに追加：
+Add to your target:
 
 ```swift
 .target(
@@ -72,9 +71,9 @@ dependencies: [
 )
 ```
 
-## 使い方
+## Usage
 
-### 基本的なStore
+### Basic Store
 
 ```swift
 @Statable(UserProfile.self)
@@ -83,50 +82,50 @@ final class UserStore {
     public init() {}
 }
 
-// View側での使用
+// Usage in View
 struct ProfileView: View {
     @Environment(UserStore.self) private var store
 
     var body: some View {
         switch store.state {
         case .idle:
-            Text("データ未取得")
+            Text("No data")
         case .loading(let previous):
             VStack {
                 ProgressView()
                 if let prev = previous {
-                    Text("前回: \(prev.name)")
+                    Text("Previous: \(prev.name)")
                 }
             }
         case .loaded(let profile):
-            Text("こんにちは、\(profile.name)さん")
+            Text("Hello, \(profile.name)")
         case .failed(let error):
-            Text("エラー: \(error.message)")
+            Text("Error: \(error.localizedMessage)")
         }
     }
 }
 ```
 
-### データのロード
+### Loading Data
 
 ```swift
-// 基本的なロード
+// Basic load
 await store.load {
     try await api.fetchProfile()
 }
 
-// 値がない場合のみロード
+// Load only if no value exists
 await store.loadIfNeeded {
     try await api.fetchProfile()
 }
 
-// 強制リロード
+// Force reload
 await store.reload {
     try await api.fetchProfile()
 }
 ```
 
-### 操作トラッキング
+### Operation Tracking
 
 ```swift
 enum DataOperation: String, CaseIterable, Sendable {
@@ -139,14 +138,14 @@ final class ItemStore {
     public init() {}
 }
 
-// 操作の追跡
+// Tracking operations
 struct ItemListView: View {
     @Environment(ItemStore.self) private var store
 
     var body: some View {
         List {
             if store.operations.isActive(.fetch) {
-                ProgressView("読み込み中...")
+                ProgressView("Loading...")
             }
 
             ForEach(store.value ?? []) { item in
@@ -154,7 +153,7 @@ struct ItemListView: View {
             }
         }
         .toolbar {
-            Button("保存") {
+            Button("Save") {
                 Task {
                     await store.operations.run(.save) {
                         try await api.saveItems(store.value ?? [])
@@ -167,60 +166,60 @@ struct ItemListView: View {
 }
 ```
 
-## API リファレンス
+## API Reference
 
-### @Statable マクロ
+### @Statable Macro
 
-#### 生成されるプロパティ
+#### Generated Properties
 
-| プロパティ | 型 | 説明 |
-|----------|------|------|
-| `value` | `T?` | 現在の値 |
-| `state` | `AsyncState<T>` | 状態（switch用） |
-| `isLoading` | `Bool` | ローディング中か |
-| `isIdle` | `Bool` | 初期状態か |
-| `isFailed` | `Bool` | 失敗状態か |
-| `hasValue` | `Bool` | 値が存在するか |
-| `error` | `StateError?` | エラー |
-| `operations` | `OperationTracker<Op>` | 操作トラッカー（operations引数指定時のみ） |
+| Property | Type | Description |
+|----------|------|-------------|
+| `value` | `T?` | Current value |
+| `state` | `AsyncState<T>` | State (for switch) |
+| `isLoading` | `Bool` | Whether loading |
+| `isIdle` | `Bool` | Whether idle |
+| `isFailed` | `Bool` | Whether failed |
+| `hasValue` | `Bool` | Whether value exists |
+| `error` | `StateError?` | Error |
+| `operations` | `OperationTracker<Op>` | Operation tracker (only with operations argument) |
 
-#### 生成されるメソッド
+#### Generated Methods
 
-| メソッド | 説明 |
-|---------|------|
-| `set(_:)` | 値を設定 |
-| `setError(_:)` | エラーを設定 |
-| `startLoading()` | ローディング開始 |
-| `reset()` | 初期状態にリセット |
-| `load(_:)` | 非同期操作を実行 |
-| `loadIfNeeded(_:)` | 値がない場合のみロード |
-| `reload(_:)` | 強制リロード |
+| Method | Description |
+|--------|-------------|
+| `set(_:)` | Set value |
+| `setError(_:)` | Set error |
+| `startLoading()` | Start loading |
+| `reset()` | Reset to initial state |
+| `load(_:)` | Execute async operation |
+| `loadIfNeeded(_:)` | Load only if no value |
+| `reload(_:)` | Force reload |
 
 ### AsyncState
 
 ```swift
 public enum AsyncState<Value: Sendable>: Sendable {
-    case idle                       // 初期状態
-    case loading(previous: Value?)  // ロード中（前回の値を保持）
-    case loaded(Value)              // ロード成功
-    case failed(StateError)         // ロード失敗
+    case idle                       // Initial state
+    case loading(previous: Value?)  // Loading (retains previous value)
+    case loaded(Value)              // Load succeeded
+    case failed(StateError)         // Load failed
 }
 ```
 
 ### OperationTracker
 
 ```swift
-// 操作の開始・完了
+// Start/complete operations
 operations.start(.fetch)
 operations.complete(.fetch)
 operations.fail(.fetch, with: error)
 
-// 状態の確認
+// Check state
 operations.isActive(.fetch)
 operations.hasActiveOperations
 operations.error(for: .fetch)
 
-// 便利メソッド
+// Convenience method
 await operations.run(.fetch) {
     try await api.fetchData()
 }
@@ -229,43 +228,50 @@ await operations.run(.fetch) {
 ### StateError
 
 ```swift
-public struct StateError: Error, Equatable, Sendable {
-    public let code: String
-    public let message: String
-    public let underlying: String?
-
-    public init(from error: Error)
-    public init(code: String, message: String)
+public enum StateError: Error, Sendable, Equatable, Hashable {
+    case network(NetworkError)
+    case validation(ValidationError)
+    case notFound(resource: String)
+    case unauthorized
+    case server(code: Int, message: String)
+    case unknown(String)
 }
+
+// Convenience properties
+error.localizedMessage  // User-facing message
+error.isRetryable       // Whether retry is appropriate
+
+// Convert from standard Error
+let stateError = StateError(from: someError)
 ```
 
-## 設計原則
+## Design Principles
 
 ### 1 Store = 1 AsyncValue
 
-各Storeは単一の型の非同期値を管理します。これにより：
-- 状態の一貫性が保証される
-- テストが容易になる
-- 責務が明確になる
+Each Store manages a single type of async value. This ensures:
+- State consistency
+- Easy testing
+- Clear responsibilities
 
 ### SSOT (Single Source of Truth)
 
-`AsyncState` enumは排他的な状態を表現し、矛盾した状態（例：`isLoading = true` かつ `error != nil`）を型レベルで防ぎます。
+The `AsyncState` enum represents exclusive states, preventing contradictory states (e.g., `isLoading = true` AND `error != nil`) at the type level.
 
-### Loading中の前回値保持
+### Previous Value During Loading
 
-`loading(previous: Value?)` により、リロード中も前回の値を表示し続けることができ、UXが向上します。
+`loading(previous: Value?)` allows displaying the previous value during reload, improving UX.
 
-## ドキュメント
+## Documentation
 
-詳細なAPIドキュメントは [GitHub Pages](https://no-problem-dev.github.io/swift-statable/documentation/statable/) で確認できます。
+Detailed API documentation is available on [GitHub Pages](https://no-problem-dev.github.io/swift-statable/documentation/statable/).
 
-## 依存関係
+## Dependencies
 
-| パッケージ | 用途 |
-|-----------|------|
-| [swift-syntax](https://github.com/swiftlang/swift-syntax) | マクロ実装 |
+| Package | Purpose |
+|---------|---------|
+| [swift-syntax](https://github.com/swiftlang/swift-syntax) | Macro implementation |
 
-## ライセンス
+## License
 
-MIT License - 詳細は [LICENSE](LICENSE) を参照してください。
+MIT License - See [LICENSE](LICENSE) for details.

@@ -3,7 +3,7 @@
 /// 単一の非同期状態を管理するストアクラスを定義するマクロ
 ///
 /// クラスに AsyncValue のラッパー機能を自動生成し、
-/// `Statable`, `Sendable` プロトコルへの準拠を追加します。
+/// `Statable`, `Sendable` プロトコルへの準拠を追加する。
 ///
 /// ## 基本的な使い方
 ///
@@ -83,7 +83,13 @@ public macro Statable<T: Sendable>(
     _ valueType: T.Type
 ) = #externalMacro(module: "StatableMacros", type: "StatableMacro")
 
-/// 操作トラッキング付きの@Statable
+/// 操作トラッキング付きの `@Statable`
+///
+/// `operations:` に `Hashable & Sendable` な列挙型を渡すと、
+/// `OperationTracker<Op>` インスタンスが `operations` プロパティとして生成される。
+/// `operations.run(.fetch) { ... }` で操作ごとの実行状態を自動追跡できる。
+///
+/// - SeeAlso: ``Statable(_:)``
 @attached(member, names: named(_asyncValue), named(_operations), named(value), named(state), named(isLoading), named(isIdle), named(isFailed), named(hasValue), named(error), named(operations), named(set), named(setError), named(startLoading), named(reset), named(load), named(loadIfNeeded), named(reload))
 @attached(extension, conformances: Statable, Sendable)
 public macro Statable<T: Sendable, Op: Hashable & Sendable>(
@@ -96,7 +102,7 @@ public macro Statable<T: Sendable, Op: Hashable & Sendable>(
 /// ストアに独立した操作トラッカーを追加するマクロ
 ///
 /// `@Statable` クラスの変数宣言に適用することで、`OperationTracker<Op>` の
-/// ストレージと getter を自動生成します。
+/// ストレージと getter を自動生成する。
 ///
 /// ## 基本的な使い方
 ///

@@ -2,27 +2,28 @@ import Observation
 
 /// 非同期でロードされる値を管理する@Observableなラッパー
 ///
-/// `AsyncState` を内部で保持し、状態遷移メソッドと便利なアクセサを提供します。
-/// SwiftUIのビューから直接観察可能で、状態変更時に自動的に再描画されます。
+/// `AsyncState` を内部で保持し、状態遷移メソッドと便利なアクセサを提供する。
+/// SwiftUIのビューから直接観察可能で、状態変更時に自動的に再描画される。
 ///
 /// ## 使用例
 ///
 /// ```swift
-/// @Statable
+/// @Statable(MetabolicProfile.self)
+/// @MainActor @Observable
 /// final class ProfileStore {
-///     @Async var profile: MetabolicProfile?
+///     public init() {}
 /// }
 ///
 /// // View側
-/// switch store.profile.state {
+/// switch store.state {
 /// case .loaded(let profile):
 ///     ProfileView(profile: profile)
 /// // ...
 /// }
 ///
 /// // 操作
-/// store.profile.set(newProfile)
-/// store.profile.startLoading()
+/// store.set(newProfile)
+/// store.startLoading()
 /// ```
 /// @MainActor で保護される前提のため @unchecked Sendable
 @Observable
