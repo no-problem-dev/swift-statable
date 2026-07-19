@@ -143,6 +143,42 @@ struct AsyncValueTests {
         // Value should be loaded
         #expect(value.value == 200)
     }
+
+    @Test("Reload loads when no value")
+    func reloadFromIdle() async {
+        let value = AsyncValue<Int>()
+
+        await value.reload {
+            7
+        }
+
+        #expect(value.value == 7)
+    }
+
+    @Test("Reload runs even when value exists")
+    func reloadReplacesExistingValue() async {
+        let value = AsyncValue(initialValue: 100)
+
+        await value.reload {
+            200
+        }
+
+        // Unlike loadIfNeeded, reload always executes the operation
+        #expect(value.value == 200)
+    }
+
+    @Test("Reload failure transitions to failed even when value exists")
+    func reloadFailureFromLoaded() async {
+        let value = AsyncValue(initialValue: 100)
+
+        await value.reload {
+            throw TestError.simulated
+        }
+
+        #expect(value.isFailed)
+        #expect(value.error != nil)
+        #expect(value.value == nil)
+    }
 }
 
 // MARK: - Test Helpers

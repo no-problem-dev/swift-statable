@@ -49,6 +49,25 @@ final class TrackMacroTests: XCTestCase {
             macros: trackMacros
         )
     }
+
+    func testTrackWithDirectTypeReference() throws {
+        assertMacroExpansion(
+            """
+            @Track(Operation) var operations
+            """,
+            expandedSource: """
+            var operations {
+                get {
+                    _operations
+                }
+            }
+
+            @ObservationIgnored
+            private let _operations = OperationTracker<Operation>()
+            """,
+            macros: trackMacros
+        )
+    }
 }
 
 #else
