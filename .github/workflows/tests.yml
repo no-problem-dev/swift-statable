@@ -1,10 +1,14 @@
+# SSOT: swift-oss-doctor/templates/workflows/tests.yml
+# 全リポ共通のテストゲート。手編集せず distribute-workflows.sh で再配布する。
 name: Tests
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
-      - 'release/**'
   workflow_dispatch:
 
 concurrency:
@@ -13,7 +17,7 @@ concurrency:
 
 jobs:
   test-macos:
-    name: macOS (Swift 6.0)
+    name: macOS (swift test)
     runs-on: macos-15
     steps:
       - name: Checkout
@@ -28,7 +32,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved') }}
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.resolved', 'Package.swift') }}
           restore-keys: |
             ${{ runner.os }}-spm-
 
