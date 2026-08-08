@@ -33,18 +33,20 @@
 /// ## 生成されるメンバー
 ///
 /// ### AsyncValue関連
-/// - `value: T?` - 現在の値
+/// - `value: T?` - いま見せられる値（読み直し中・失敗後も前の値が残る）
 /// - `state: AsyncState<T>` - 状態（switch用）
 /// - `isLoading: Bool` - ローディング中か
-/// - `hasValue: Bool` - 値が存在するか
+/// - `isInitialLoading: Bool` - まだ一度も答えを持たないままのロード中か（骨組みを出す唯一の状態）
+/// - `isReloading: Bool` - 前の答えを持ったままのロード中か（画面を空にしない）
+/// - `hasValue: Bool` - 見せられる値があるか
+/// - `isLoaded: Bool` - 最後のロードが成功して終わっているか
 /// - `error: StateError?` - エラー
 /// - `set(_:)` - 値を設定
 /// - `setError(_:)` - エラーを設定
 /// - `startLoading()` - ローディング開始
 /// - `reset()` - 初期状態にリセット
-/// - `load(_:)` - 非同期操作を実行
-/// - `loadIfNeeded(_:)` - 値がない場合のみロード
-/// - `reload(_:)` - 強制リロード
+/// - `load(_:)` - 非同期操作を実行（重なりは後勝ち・取り消しは失敗にしない）
+/// - `loadIfNeeded(_:)` - まだ一度も成功していないときだけロード
 ///
 /// ### OperationTracker関連（operations引数指定時のみ）
 /// - `operations: OperationTracker<Op>` - トラッカーインスタンス
@@ -57,16 +59,14 @@
 ///     Text(profile.name)
 /// }
 ///
-/// // 状態でswitch
-/// switch store.state {
-/// case .idle:
-///     Text("未取得")
-/// case .loading(let prev):
-///     ProgressView()
-/// case .loaded(let profile):
+/// // 画面は 3 つの顔で出し分ける（`isLoading` だけを見て描かない）
+/// if let profile = store.value {
 ///     ProfileView(profile: profile)
-/// case .failed(let error):
-///     ErrorView(error: error)
+///     if let error = store.error { Banner(error) }
+/// } else if let error = store.error {
+///     FailureFace(error)
+/// } else {
+///     Skeleton()
 /// }
 ///
 /// // 操作（operations付きの場合）
@@ -77,7 +77,7 @@
 ///     try await api.record(workout)
 /// }
 /// ```
-@attached(member, names: named(_asyncValue), named(_operations), named(value), named(state), named(isLoading), named(isIdle), named(isFailed), named(hasValue), named(error), named(operations), named(set), named(setError), named(startLoading), named(reset), named(load), named(loadIfNeeded), named(reload))
+@attached(member, names: named(_asyncValue), named(_operations), named(value), named(state), named(isLoading), named(isIdle), named(isFailed), named(isInitialLoading), named(isReloading), named(hasValue), named(isLoaded), named(error), named(operations), named(set), named(setError), named(startLoading), named(reset), named(load), named(loadIfNeeded))
 @attached(extension, conformances: Statable, Sendable)
 public macro Statable<T: Sendable>(
     _ valueType: T.Type
@@ -90,7 +90,7 @@ public macro Statable<T: Sendable>(
 /// `operations.run(.fetch) { ... }` で操作ごとの実行状態を自動追跡できる。
 ///
 /// - SeeAlso: ``Statable(_:)``
-@attached(member, names: named(_asyncValue), named(_operations), named(value), named(state), named(isLoading), named(isIdle), named(isFailed), named(hasValue), named(error), named(operations), named(set), named(setError), named(startLoading), named(reset), named(load), named(loadIfNeeded), named(reload))
+@attached(member, names: named(_asyncValue), named(_operations), named(value), named(state), named(isLoading), named(isIdle), named(isFailed), named(isInitialLoading), named(isReloading), named(hasValue), named(isLoaded), named(error), named(operations), named(set), named(setError), named(startLoading), named(reset), named(load), named(loadIfNeeded))
 @attached(extension, conformances: Statable, Sendable)
 public macro Statable<T: Sendable, Op: Hashable & Sendable>(
     _ valueType: T.Type,

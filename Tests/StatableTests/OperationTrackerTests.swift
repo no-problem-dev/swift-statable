@@ -2,6 +2,7 @@ import Testing
 @testable import Statable
 
 @Suite("OperationTracker Tests")
+@MainActor
 struct OperationTrackerTests {
 
     enum TestOperation: String, CaseIterable, Sendable {

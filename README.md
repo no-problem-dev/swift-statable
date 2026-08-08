@@ -15,7 +15,12 @@ A declarative state management macro for SwiftUI. Combines the AsyncValue patter
 - **Exclusive State Representation**: Type-safe expression of `.idle`, `.loading`, `.loaded`, `.failed` with `AsyncState<T>` enum
 - **Operation Tracking**: Track multiple concurrent operations individually with `OperationTracker`
 - **@Observable Integration**: Fully integrated with SwiftUI's `@Observable`
-- **Sendable Conformance**: Full Strict Concurrency support
+- **Main-actor by construction**: `AsyncValue` and `OperationTracker` are `@MainActor`, so state
+  transitions can never race with SwiftUI's reads — the compiler enforces it, not a comment
+- **Last-started-wins**: overlapping loads settle deterministically; a slow earlier load can never
+  overwrite a newer result
+- **Cancellation is not failure**: a cancelled load returns to the previous value instead of
+  showing an error or getting stuck in `loading`
 
 ## Quick Start
 
@@ -56,7 +61,7 @@ Add the following to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-statable.git", from: "1.0.2")
+    .package(url: "https://github.com/no-problem-dev/swift-statable.git", from: "2.0.0")
 ]
 ```
 
@@ -114,13 +119,8 @@ await store.load {
     try await api.fetchProfile()
 }
 
-// Load only if no value exists
+// Load only if the last load has not succeeded
 await store.loadIfNeeded {
-    try await api.fetchProfile()
-}
-
-// Force reload
-await store.reload {
     try await api.fetchProfile()
 }
 ```
@@ -177,9 +177,12 @@ struct ItemListView: View {
 | `value` | `T?` | Current value |
 | `state` | `AsyncState<T>` | State (for switch) |
 | `isLoading` | `Bool` | Whether loading |
+| `isInitialLoading` | `Bool` | Loading with no value yet — the only state that should show a skeleton |
+| `isReloading` | `Bool` | Loading while holding a previous value — do not blank the screen |
 | `isIdle` | `Bool` | Whether idle |
 | `isFailed` | `Bool` | Whether failed |
-| `hasValue` | `Bool` | Whether value exists |
+| `hasValue` | `Bool` | Whether there is something to show (true in `loading`/`failed` if a previous value exists) |
+| `isLoaded` | `Bool` | Whether the last load finished successfully |
 | `error` | `StateError?` | Error |
 | `operations` | `OperationTracker<Op>` | Operation tracker (only with operations argument) |
 
@@ -191,20 +194,37 @@ struct ItemListView: View {
 | `setError(_:)` | Set error |
 | `startLoading()` | Start loading |
 | `reset()` | Reset to initial state |
-| `load(_:)` | Execute async operation |
-| `loadIfNeeded(_:)` | Load only if no value |
-| `reload(_:)` | Force reload |
+| `load(_:)` | Execute async operation (last-started-wins; cancellation is not failure) |
+| `loadIfNeeded(_:)` | Load only if the last load has not succeeded |
 
 ### AsyncState
 
 ```swift
 public enum AsyncState<Value: Sendable>: Sendable {
-    case idle                       // Initial state
-    case loading(previous: Value?)  // Loading (retains previous value)
-    case loaded(Value)              // Load succeeded
-    case failed(StateError)         // Load failed
+    case idle                                        // Nothing requested yet
+    case loading(previous: Value?)                   // Loading, keeping what was on screen
+    case loaded(Value)                               // Load succeeded
+    case failed(StateError, previous: Value?)        // Load failed, keeping what was on screen
 }
 ```
+
+`value` returns the previous value in `loading` **and** `failed`, so one check covers
+"is there anything to show". That lets a view render exactly three faces:
+
+```swift
+if let value = store.value {
+    Content(value)                                  // also during reload, also after a failure
+    if let error = store.error { Banner(error) }    // failure does not take the screen away
+} else if let error = store.error {
+    FailureFace(error)                              // only when there is nothing to show
+} else {
+    Skeleton()                                      // no answer yet
+}
+```
+
+Do not drive the view from `isLoading` alone: "is it loading" is not a reason to blank the screen.
+An empty array is an answer ("none"), so never read `value?.isEmpty` as "no value" — doing that
+makes users with zero items see a skeleton on every refresh.
 
 ### OperationTracker
 
@@ -258,9 +278,31 @@ Each Store manages a single type of async value. This ensures:
 
 The `AsyncState` enum represents exclusive states, preventing contradictory states (e.g., `isLoading = true` AND `error != nil`) at the type level.
 
-### Previous Value During Loading
+### Previous Value During Loading and Failure
 
-`loading(previous: Value?)` allows displaying the previous value during reload, improving UX.
+Both `loading` and `failed` carry the previous value. Throwing it away is a decision only the view
+can make correctly — if the state makes it first, the view has no choice left.
+
+### Main Actor by Construction
+
+`AsyncValue` and `OperationTracker` are `@MainActor`. They *are* view state, and SwiftUI reads them
+on the main actor; a write from another thread also delivers Observation's invalidation from that
+thread, and a dropped invalidation leaves the view frozen on whatever it drew last — usually a
+spinner that never goes away. Up to 1.x this was only a comment next to `@unchecked Sendable`, and
+the comment was wrong: `load(_:)` was a `nonisolated async` function, so it hopped off the caller's
+actor and mutated state there. `IsolationTests` now measures where the writes happen.
+
+## Migrating from 1.x
+
+| Change | What to do |
+|---|---|
+| `AsyncValue` / `OperationTracker` are `@MainActor` | Call them from `@MainActor` code. Stores already written as `@MainActor @Observable` need no change |
+| `AsyncState.failed` carries `previous` | Update exhaustive `switch` over `state`. `value` now returns the previous value on failure — a view that used `value == nil` to detect failure should read `error` instead |
+| `reload(_:)` removed | Use `load(_:)`; it was the same behaviour under a second name |
+| `loadIfNeeded(_:)` skips only on success | It now retries after a failure that left a previous value |
+| `OperationTracker.run(_:task:)` returns `Result?` | `nil` means the task was cancelled — cancellation is no longer recorded as a failure |
+| `AsyncStateProvider` / `OperationTrackable` / `ActorIsolation` removed | Nothing conformed to them; the default implementations silently returned `nil` and did nothing |
+| `description` / `debugDescription` / `Equatable` on `AsyncValue` removed | Print or compare `store.state` instead |
 
 ## Documentation
 

@@ -41,6 +41,16 @@ final class StatableMacroTests: XCTestCase {
                     _asyncValue.isLoading
                 }
 
+                /// まだ一度も答えを持たないままのロード中か（骨組みを出してよい唯一の状態）
+                public var isInitialLoading: Bool {
+                    _asyncValue.isInitialLoading
+                }
+
+                /// 前の答えを持ったままのロード中か（画面を空にしない）
+                public var isReloading: Bool {
+                    _asyncValue.isReloading
+                }
+
                 /// 初期状態かどうか
                 public var isIdle: Bool {
                     _asyncValue.isIdle
@@ -51,9 +61,14 @@ final class StatableMacroTests: XCTestCase {
                     _asyncValue.isFailed
                 }
 
-                /// 値が存在するか
+                /// 見せられる値があるか（`loading` / `failed` でも前の値があれば true）
                 public var hasValue: Bool {
                     _asyncValue.hasValue
+                }
+
+                /// 最後のロードが成功して終わっているか
+                public var isLoaded: Bool {
+                    _asyncValue.isLoaded
                 }
 
                 /// エラー（failed状態の場合のみ）
@@ -86,14 +101,9 @@ final class StatableMacroTests: XCTestCase {
                     await _asyncValue.load(operation)
                 }
 
-                /// 条件付きでロード（値が存在しない場合のみ）
+                /// まだ一度も成功していないときだけロード
                 public func loadIfNeeded(_ operation: @Sendable () async throws -> Profile) async {
                     await _asyncValue.loadIfNeeded(operation)
-                }
-
-                /// 強制リロード
-                public func reload(_ operation: @Sendable () async throws -> Profile) async {
-                    await _asyncValue.reload(operation)
                 }
             }
 
@@ -135,6 +145,16 @@ final class StatableMacroTests: XCTestCase {
                     _asyncValue.isLoading
                 }
 
+                /// まだ一度も答えを持たないままのロード中か（骨組みを出してよい唯一の状態）
+                public var isInitialLoading: Bool {
+                    _asyncValue.isInitialLoading
+                }
+
+                /// 前の答えを持ったままのロード中か（画面を空にしない）
+                public var isReloading: Bool {
+                    _asyncValue.isReloading
+                }
+
                 /// 初期状態かどうか
                 public var isIdle: Bool {
                     _asyncValue.isIdle
@@ -145,9 +165,14 @@ final class StatableMacroTests: XCTestCase {
                     _asyncValue.isFailed
                 }
 
-                /// 値が存在するか
+                /// 見せられる値があるか（`loading` / `failed` でも前の値があれば true）
                 public var hasValue: Bool {
                     _asyncValue.hasValue
+                }
+
+                /// 最後のロードが成功して終わっているか
+                public var isLoaded: Bool {
+                    _asyncValue.isLoaded
                 }
 
                 /// エラー（failed状態の場合のみ）
@@ -180,14 +205,9 @@ final class StatableMacroTests: XCTestCase {
                     await _asyncValue.load(operation)
                 }
 
-                /// 条件付きでロード（値が存在しない場合のみ）
+                /// まだ一度も成功していないときだけロード
                 public func loadIfNeeded(_ operation: @Sendable () async throws -> Profile) async {
                     await _asyncValue.loadIfNeeded(operation)
-                }
-
-                /// 強制リロード
-                public func reload(_ operation: @Sendable () async throws -> Profile) async {
-                    await _asyncValue.reload(operation)
                 }
             }
 
@@ -227,6 +247,16 @@ final class StatableMacroTests: XCTestCase {
                     _asyncValue.isLoading
                 }
 
+                /// まだ一度も答えを持たないままのロード中か（骨組みを出してよい唯一の状態）
+                public var isInitialLoading: Bool {
+                    _asyncValue.isInitialLoading
+                }
+
+                /// 前の答えを持ったままのロード中か（画面を空にしない）
+                public var isReloading: Bool {
+                    _asyncValue.isReloading
+                }
+
                 /// 初期状態かどうか
                 public var isIdle: Bool {
                     _asyncValue.isIdle
@@ -237,9 +267,14 @@ final class StatableMacroTests: XCTestCase {
                     _asyncValue.isFailed
                 }
 
-                /// 値が存在するか
+                /// 見せられる値があるか（`loading` / `failed` でも前の値があれば true）
                 public var hasValue: Bool {
                     _asyncValue.hasValue
+                }
+
+                /// 最後のロードが成功して終わっているか
+                public var isLoaded: Bool {
+                    _asyncValue.isLoaded
                 }
 
                 /// エラー（failed状態の場合のみ）
@@ -272,14 +307,9 @@ final class StatableMacroTests: XCTestCase {
                     await _asyncValue.load(operation)
                 }
 
-                /// 条件付きでロード（値が存在しない場合のみ）
+                /// まだ一度も成功していないときだけロード
                 public func loadIfNeeded(_ operation: @Sendable () async throws -> Module.Profile) async {
                     await _asyncValue.loadIfNeeded(operation)
-                }
-
-                /// 強制リロード
-                public func reload(_ operation: @Sendable () async throws -> Module.Profile) async {
-                    await _asyncValue.reload(operation)
                 }
             }
 
@@ -322,6 +352,16 @@ final class StatableMacroTests: XCTestCase {
                     _asyncValue.isLoading
                 }
 
+                /// まだ一度も答えを持たないままのロード中か（骨組みを出してよい唯一の状態）
+                public var isInitialLoading: Bool {
+                    _asyncValue.isInitialLoading
+                }
+
+                /// 前の答えを持ったままのロード中か（画面を空にしない）
+                public var isReloading: Bool {
+                    _asyncValue.isReloading
+                }
+
                 /// 初期状態かどうか
                 public var isIdle: Bool {
                     _asyncValue.isIdle
@@ -332,9 +372,14 @@ final class StatableMacroTests: XCTestCase {
                     _asyncValue.isFailed
                 }
 
-                /// 値が存在するか
+                /// 見せられる値があるか（`loading` / `failed` でも前の値があれば true）
                 public var hasValue: Bool {
                     _asyncValue.hasValue
+                }
+
+                /// 最後のロードが成功して終わっているか
+                public var isLoaded: Bool {
+                    _asyncValue.isLoaded
                 }
 
                 /// エラー（failed状態の場合のみ）
@@ -372,14 +417,9 @@ final class StatableMacroTests: XCTestCase {
                     await _asyncValue.load(operation)
                 }
 
-                /// 条件付きでロード（値が存在しない場合のみ）
+                /// まだ一度も成功していないときだけロード
                 public func loadIfNeeded(_ operation: @Sendable () async throws -> [Activity]) async {
                     await _asyncValue.loadIfNeeded(operation)
-                }
-
-                /// 強制リロード
-                public func reload(_ operation: @Sendable () async throws -> [Activity]) async {
-                    await _asyncValue.reload(operation)
                 }
             }
 

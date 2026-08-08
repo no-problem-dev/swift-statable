@@ -74,6 +74,18 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
             }
             """,
             """
+            /// まだ一度も答えを持たないままのロード中か（骨組みを出してよい唯一の状態）
+            public var isInitialLoading: Bool {
+                _asyncValue.isInitialLoading
+            }
+            """,
+            """
+            /// 前の答えを持ったままのロード中か（画面を空にしない）
+            public var isReloading: Bool {
+                _asyncValue.isReloading
+            }
+            """,
+            """
             /// 初期状態かどうか
             public var isIdle: Bool {
                 _asyncValue.isIdle
@@ -86,9 +98,15 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
             }
             """,
             """
-            /// 値が存在するか
+            /// 見せられる値があるか（`loading` / `failed` でも前の値があれば true）
             public var hasValue: Bool {
                 _asyncValue.hasValue
+            }
+            """,
+            """
+            /// 最後のロードが成功して終わっているか
+            public var isLoaded: Bool {
+                _asyncValue.isLoaded
             }
             """,
             """
@@ -144,15 +162,9 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
             }
             """,
             """
-            /// 条件付きでロード（値が存在しない場合のみ）
+            /// まだ一度も成功していないときだけロード
             public func loadIfNeeded(_ operation: @Sendable () async throws -> \(raw: valueType)) async {
                 await _asyncValue.loadIfNeeded(operation)
-            }
-            """,
-            """
-            /// 強制リロード
-            public func reload(_ operation: @Sendable () async throws -> \(raw: valueType)) async {
-                await _asyncValue.reload(operation)
             }
             """,
         ])

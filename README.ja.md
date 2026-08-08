@@ -15,7 +15,10 @@ SwiftUI向けの宣言的な状態管理マクロ。AsyncValueパターンとOpe
 - **排他的状態表現**: `AsyncState<T>` enumで `.idle`, `.loading`, `.loaded`, `.failed` を型安全に表現
 - **操作トラッキング**: `OperationTracker` で複数の並行操作を個別に追跡
 - **@Observable統合**: SwiftUIの `@Observable` と完全に統合
-- **Sendable準拠**: Strict Concurrency対応
+- **メインアクターの上でだけ生きる**: `AsyncValue` と `OperationTracker` は `@MainActor`。
+  状態の書き換えが SwiftUI の読み取りと競合しないことを、注記ではなくコンパイラが守る
+- **重なったロードは後から始まった方が勝つ**: 遅い古い 1 本が、新しい答えを上書きしない
+- **取り消しは失敗にしない**: やめたロードは前の答えへ戻る（`loading` に取り残されない）
 
 ## クイックスタート
 
@@ -57,7 +60,7 @@ final class WorkoutStore {
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-statable.git", from: "1.0.2")
+    .package(url: "https://github.com/no-problem-dev/swift-statable.git", from: "2.0.0")
 ]
 ```
 
@@ -115,13 +118,8 @@ await store.load {
     try await api.fetchProfile()
 }
 
-// 値がない場合のみロード
+// まだ一度も成功していないときだけロード
 await store.loadIfNeeded {
-    try await api.fetchProfile()
-}
-
-// 強制リロード
-await store.reload {
     try await api.fetchProfile()
 }
 ```
@@ -180,7 +178,10 @@ struct ItemListView: View {
 | `isLoading` | `Bool` | ローディング中か |
 | `isIdle` | `Bool` | 初期状態か |
 | `isFailed` | `Bool` | 失敗状態か |
-| `hasValue` | `Bool` | 値が存在するか |
+| `isInitialLoading` | `Bool` | まだ一度も答えを持たないままのロード中か（骨組みを出してよい唯一の状態） |
+| `isReloading` | `Bool` | 前の答えを持ったままのロード中か（画面を空にしない） |
+| `hasValue` | `Bool` | 見せられる値があるか（`loading` / `failed` でも前の値があれば true） |
+| `isLoaded` | `Bool` | 最後のロードが成功して終わっているか |
 | `error` | `StateError?` | エラー |
 | `operations` | `OperationTracker<Op>` | 操作トラッカー（operations引数指定時のみ） |
 
@@ -192,20 +193,37 @@ struct ItemListView: View {
 | `setError(_:)` | エラーを設定 |
 | `startLoading()` | ローディング開始 |
 | `reset()` | 初期状態にリセット |
-| `load(_:)` | 非同期操作を実行 |
-| `loadIfNeeded(_:)` | 値がない場合のみロード |
-| `reload(_:)` | 強制リロード |
+| `load(_:)` | 非同期操作を実行（重なりは後勝ち・取り消しは失敗にしない） |
+| `loadIfNeeded(_:)` | まだ一度も成功していないときだけロード |
 
 ### AsyncState
 
 ```swift
 public enum AsyncState<Value: Sendable>: Sendable {
     case idle                       // 初期状態
-    case loading(previous: Value?)  // ロード中（前回の値を保持）
+    case loading(previous: Value?)  // ロード中（見せていた値を保つ）
     case loaded(Value)              // ロード成功
-    case failed(StateError)         // ロード失敗
+    case failed(StateError, previous: Value?)  // ロード失敗（見せていた値を保つ）
 }
 ```
+
+`value` は `loading` でも `failed` でも前の値を返す。だから「見せるものがあるか」の判断は 1 つで済み、
+画面はちょうど 3 つの顔に分かれる。
+
+```swift
+if let value = store.value {
+    Content(value)                                  // 読み直し中も、失敗した後も出す
+    if let error = store.error { Banner(error) }    // 失敗は画面を奪わず帯で言う
+} else if let error = store.error {
+    FailureFace(error)                              // 見せるものが無いときだけ画面を奪う
+} else {
+    Skeleton()                                      // まだ答えが無い
+}
+```
+
+**`isLoading` だけを見て描かないこと。** 読み込み中かどうかは「画面を空にする理由」にならない。
+空の配列は立派な答え（「無い」）なので、`value?.isEmpty` を「値が無い」と読み替えてはいけない
+—— 読み替えると、0 件の利用者だけが読み直しのたびに骨組みを見ることになる。
 
 ### OperationTracker
 
@@ -259,9 +277,31 @@ let stateError = StateError(from: someError)
 
 `AsyncState` enumは排他的な状態を表現し、矛盾した状態（例：`isLoading = true` かつ `error != nil`）を型レベルで防ぐ。
 
-### Loading中の前回値保持
+### ロード中も失敗後も、前の値を保つ
 
-`loading(previous: Value?)` により、リロード中も前回の値を表示し続けることができ、UXが向上する。
+`loading` と `failed` の両方が前の値を運ぶ。捨てるかどうかを正しく決められるのは画面だけで、
+状態が先に捨ててしまうと画面には選択肢が残らない。
+
+### メインアクターの上でだけ生きる
+
+`AsyncValue` と `OperationTracker` は `@MainActor`。これらは画面の状態そのもので、SwiftUI は
+メインアクターで読む。別のスレッドから書き換えると Observation の無効化通知もそのスレッドから飛び、
+取りこぼすと画面は最後に描いたもの——たいていは読み込み中の表示——のまま止まる。
+1.x では `@unchecked Sendable` の隣に注記があるだけで、しかもその注記は嘘だった
+（`load(_:)` が `nonisolated` な `async` 関数で、呼び出し元のアクターから外れて書き換えていた）。
+いまは `IsolationTests` が書き換えの場所を実測して見張っている。
+
+## 1.x からの移行
+
+| 変わったこと | すること |
+|---|---|
+| `AsyncValue` / `OperationTracker` が `@MainActor` | `@MainActor` から呼ぶ。`@MainActor @Observable` で書いていたストアは変更不要 |
+| `AsyncState.failed` が `previous` を持つ | `state` の網羅 `switch` を直す。`value` は失敗時も前の値を返すので、失敗の検出は `error` で見る |
+| `reload(_:)` を削除 | `load(_:)` を使う（同じ振る舞いに別名が付いていただけ） |
+| `loadIfNeeded(_:)` は成功したときだけ省略 | 前の値が残っている失敗の後は、もう一度読みに行く |
+| `OperationTracker.run(_:task:)` が `Result?` を返す | `nil` は取り消し。取り消しはもう失敗として記録しない |
+| `AsyncStateProvider` / `OperationTrackable` / `ActorIsolation` を削除 | 誰も準拠しておらず、既定実装は黙って nil と no-op を返していた |
+| `AsyncValue` の `description` / `debugDescription` / `Equatable` を削除 | `store.state` を print・比較する |
 
 ## ドキュメント
 

@@ -1,8 +1,12 @@
 import Observation
 
-/// 複数の並行操作を追跡するための状態管理
+/// 複数の並行操作を追跡するための状態管理。**メインアクターの上でだけ生きる**（理由は ``AsyncValue`` と同じ）。
 ///
 /// 個別の操作ごとに実行状態とエラーを追跡できます。
+///
+/// 1.x では `run(_:task:)` も `nonisolated` な `async` 関数だったので、`start` / `complete` /
+/// `fail` が汎用エグゼキュータで走り、SwiftUI が読んでいる `activeOperations` を
+/// 別スレッドから書き換えていた。押しているあいだのスピナーが消えない形で現れる。
 ///
 /// ## 使用例
 ///
@@ -28,9 +32,9 @@ import Observation
 ///     ProgressView("記録中...")
 /// }
 /// ```
-/// @MainActor で保護される前提のため @unchecked Sendable
+@MainActor
 @Observable
-public final class OperationTracker<Operation: Hashable & Sendable>: @unchecked Sendable {
+public final class OperationTracker<Operation: Hashable & Sendable> {
     // MARK: - State
 
     /// 実行中の操作
@@ -129,6 +133,9 @@ public final class OperationTracker<Operation: Hashable & Sendable>: @unchecked 
 
     /// 操作を実行し、結果を自動的に追跡
     ///
+    /// 取り消し（`Task` のキャンセル）は失敗として記録しない。やめただけのものを
+    /// 赤い字で見せると、押した覚えのない失敗が画面に残る。
+    ///
     /// ```swift
     /// await store.operations.run(.fetch) {
     ///     try await api.fetchActivities()
@@ -138,25 +145,32 @@ public final class OperationTracker<Operation: Hashable & Sendable>: @unchecked 
     /// - Parameters:
     ///   - operation: 追跡する操作
     ///   - task: 実行するタスク
-    /// - Returns: タスクの結果
+    /// - Returns: タスクの結果。取り消されたときは `nil`
     @discardableResult
     public func run<T: Sendable>(
         _ operation: Operation,
         task: @Sendable () async throws -> T
-    ) async -> Result<T, StateError> {
+    ) async -> Result<T, StateError>? {
         start(operation)
         do {
             let result = try await task()
             complete(operation)
             return .success(result)
         } catch {
+            guard !isCancellation(error) else {
+                complete(operation)
+                return nil
+            }
             let stateError = StateError(from: error)
             fail(operation, with: stateError)
             return .failure(stateError)
         }
     }
 
-    /// 操作を実行し、結果をAsyncValueに設定
+    /// 操作を実行し、結果を ``AsyncValue`` に設定する。
+    ///
+    /// 遷移の規則（重なりの扱い・取り消しの扱い）は ``AsyncValue/load(_:)`` が持っているので、
+    /// ここはそれに委ねて、操作の追跡だけを足す。**同じ規則を 2 か所に書かない。**
     ///
     /// ```swift
     /// await store.operations.run(.fetch, into: store.activities) {
@@ -174,25 +188,17 @@ public final class OperationTracker<Operation: Hashable & Sendable>: @unchecked 
         task: @Sendable () async throws -> T
     ) async {
         start(operation)
-        asyncValue.startLoading()
-        do {
-            let result = try await task()
-            asyncValue.set(result)
+        await asyncValue.load(task)
+        if let error = asyncValue.error {
+            fail(operation, with: error)
+        } else {
             complete(operation)
-        } catch {
-            let stateError = StateError(from: error)
-            asyncValue.setError(stateError)
-            fail(operation, with: stateError)
         }
     }
-}
 
-// MARK: - CustomStringConvertible
-
-extension OperationTracker: CustomStringConvertible {
-    public var description: String {
-        let activeList = activeOperations.map { String(describing: $0) }.joined(separator: ", ")
-        let errorCount = errors.count
-        return "OperationTracker(active: [\(activeList)], errors: \(errorCount))"
+    /// 取り消しか。URLSession は取り消しを `URLError(.cancelled)` で返すので、
+    /// 投げられた型ではなくタスクの現在地でも判断する。
+    private func isCancellation(_ error: Error) -> Bool {
+        Task.isCancelled || error is CancellationError
     }
 }

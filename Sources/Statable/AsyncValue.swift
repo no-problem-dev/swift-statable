@@ -1,37 +1,49 @@
 import Observation
 
-/// 非同期でロードされる値を管理する@Observableなラッパー
+/// 非同期でロードされる値を持つ、観測可能な容器。**メインアクターの上でだけ生きる。**
 ///
-/// `AsyncState` を内部で保持し、状態遷移メソッドと便利なアクセサを提供する。
-/// SwiftUIのビューから直接観察可能で、状態変更時に自動的に再描画される。
+/// ## なぜ `@MainActor` なのか
+///
+/// これは画面の状態そのもので、SwiftUI はメインアクターで読む。書き換えが別のスレッドから来ると、
+/// Observation の無効化通知もそのスレッドから飛ぶので、SwiftUI が取りこぼすことがある。
+/// **取りこぼすと画面は最後に描いた状態のまま止まる**（「読み込み中が消えない」として現れる）。
+///
+/// 1.x では `@unchecked Sendable` に「`@MainActor` で保護される前提」と注記していたが、
+/// `load(_:)` が `nonisolated` な `async` 関数だったので、`@MainActor` のストアから呼んでも
+/// 呼んだ瞬間に汎用エグゼキュータへ移り、`startLoading()` も `set()` もそこで走っていた
+/// （`AsyncValueIsolationTests` が実測で押さえている）。**前提は注記ではなく宣言で守る。**
+///
+/// 通信そのものは外へ出る —— `operation` は `@Sendable` なので、メインアクターを塞がない。
+/// メインに留まるのは状態の書き換えだけ。
 ///
 /// ## 使用例
 ///
 /// ```swift
-/// @Statable(MetabolicProfile.self)
+/// @Statable(UserProfile.self)
 /// @MainActor @Observable
 /// final class ProfileStore {
-///     public init() {}
+///     func load() async {
+///         await load { try await api.fetchProfile() }
+///     }
 /// }
-///
-/// // View側
-/// switch store.state {
-/// case .loaded(let profile):
-///     ProfileView(profile: profile)
-/// // ...
-/// }
-///
-/// // 操作
-/// store.set(newProfile)
-/// store.startLoading()
 /// ```
-/// @MainActor で保護される前提のため @unchecked Sendable
+@MainActor
 @Observable
-public final class AsyncValue<Value: Sendable>: @unchecked Sendable {
+public final class AsyncValue<Value: Sendable> {
     // MARK: - State
 
     /// 内部の状態（switch用に公開）
     public private(set) var state: AsyncState<Value>
+
+    /// いま状態を書き戻してよい呼び出しの番号。
+    ///
+    /// **後から始まった方が勝つ。** 同じ値へのロードが重なると、遅く始まった 1 本ではなく
+    /// 遅く終わった 1 本が勝ってしまい、新しい成功を古い失敗が塗り潰すことがある。
+    /// 開始した順に番号を振り、書き戻す前にまだ自分の番号かを確かめる。
+    ///
+    /// `set` / `setError` / `reset` / `startLoading` も番号を進める
+    /// —— 明示的に置かれた値は、走っている途中のロードより新しい情報だから。
+    private var generation: UInt64 = 0
 
     // MARK: - Initialization
 
@@ -54,74 +66,75 @@ public final class AsyncValue<Value: Sendable>: @unchecked Sendable {
 
     // MARK: - Computed Properties
 
-    /// 現在の値（loaded または loading の previous）
-    public var value: Value? {
-        state.value
-    }
+    /// いま見せられる値（`loading` / `failed` のときは直前の値）
+    public var value: Value? { state.value }
 
     /// ロード中かどうか
-    public var isLoading: Bool {
-        state.isLoading
-    }
+    public var isLoading: Bool { state.isLoading }
+
+    /// まだ一度も答えを持たないままのロード中か（骨組みを出してよい唯一の状態）
+    public var isInitialLoading: Bool { state.isInitialLoading }
+
+    /// 前の答えを持ったままのロード中か（画面を空にしない）
+    public var isReloading: Bool { state.isReloading }
 
     /// エラー（failed状態の場合のみ）
-    public var error: StateError? {
-        state.error
-    }
+    public var error: StateError? { state.error }
 
-    /// 値が存在するか（loaded状態）
-    public var hasValue: Bool {
-        state.hasValue
-    }
+    /// 見せられる値があるか
+    public var hasValue: Bool { state.hasValue }
+
+    /// 最後のロードが成功して終わっているか
+    public var isLoaded: Bool { state.isLoaded }
 
     /// 初期状態かどうか
-    public var isIdle: Bool {
-        state.isIdle
-    }
+    public var isIdle: Bool { state.isIdle }
 
     /// 失敗状態かどうか
-    public var isFailed: Bool {
-        state.isFailed
-    }
+    public var isFailed: Bool { state.isFailed }
 
     // MARK: - State Transitions
 
     /// 値を設定（loaded状態に遷移）
     /// - Parameter value: 設定する値
     public func set(_ value: Value) {
+        claim()
         state = .loaded(value)
     }
 
-    /// エラーを設定（failed状態に遷移）
+    /// エラーを設定（failed状態に遷移・前の値は保つ）
     /// - Parameter error: 発生したエラー
     public func setError(_ error: StateError) {
-        state = .failed(error)
+        claim()
+        state.fail(with: error)
     }
 
     /// 標準のErrorからStateErrorに変換して設定
     /// - Parameter error: 発生したエラー
     public func setError(from error: Error) {
-        state = .failed(StateError(from: error))
+        setError(StateError(from: error))
     }
 
-    /// ロード開始（loading状態に遷移）
-    ///
-    /// 前回の値がある場合は `loading(previous:)` として保持され、
-    /// ローディング中も前回の値を表示するUXが可能になります。
+    /// ロード開始（loading状態に遷移・前の値は保つ）
     public func startLoading() {
+        claim()
         state.startLoading()
     }
 
     /// 初期状態にリセット
     public func reset() {
+        claim()
         state.reset()
     }
 
     // MARK: - Convenience Methods
 
-    /// 非同期操作を実行し、結果を状態に反映
+    /// 非同期操作を実行し、結果を状態に反映する。
     ///
-    /// ローディング開始、成功/失敗の状態遷移を自動的に処理します。
+    /// ロード開始・成功・失敗・取り消しの遷移をここが引き受ける。
+    ///
+    /// - 重なったロードは**後から始まった方が勝つ**（古い方は結果を捨てて黙って抜ける）
+    /// - 取り消し（`Task` のキャンセル）は失敗にしない。前の答えへ戻す
     ///
     /// ```swift
     /// await store.profile.load {
@@ -131,66 +144,40 @@ public final class AsyncValue<Value: Sendable>: @unchecked Sendable {
     ///
     /// - Parameter operation: 実行する非同期操作
     public func load(_ operation: @Sendable () async throws -> Value) async {
-        startLoading()
+        let token = claim()
+        state.startLoading()
         do {
             let value = try await operation()
-            set(value)
+            guard token == generation else { return }
+            state = .loaded(value)
         } catch {
-            setError(from: error)
+            guard token == generation else { return }
+            // やめただけのものを失敗として見せない。**同時に、取り消しで `loading` に
+            // 取り残されるのも防ぐ**（画面を離れて戻ると回りっぱなし、の正体）。
+            // URLSession は取り消しを `URLError(.cancelled)` で返すので、
+            // 投げられた型ではなくタスクの現在地で判断する。
+            if Task.isCancelled || error is CancellationError {
+                state.cancelLoading()
+            } else {
+                state.fail(with: StateError(from: error))
+            }
         }
     }
 
-    /// 条件付きでロード（値が存在しない場合のみ）
+    /// まだ一度も成功していないときだけロードする。
     ///
-    /// ```swift
-    /// await store.profile.loadIfNeeded {
-    ///     try await api.fetchProfile()
-    /// }
-    /// ```
+    /// 失敗して前の値だけが残っている状態は「済んでいる」に数えない（もう一度読みに行く）。
     ///
     /// - Parameter operation: 実行する非同期操作
     public func loadIfNeeded(_ operation: @Sendable () async throws -> Value) async {
-        guard !hasValue else { return }
+        guard !isLoaded else { return }
         await load(operation)
     }
 
-    /// 強制リロード（loading中でも実行）
-    ///
-    /// - Parameter operation: 実行する非同期操作
-    public func reload(_ operation: @Sendable () async throws -> Value) async {
-        await load(operation)
-    }
-}
-
-// MARK: - Equatable
-
-extension AsyncValue: Equatable where Value: Equatable {
-    public static func == (lhs: AsyncValue<Value>, rhs: AsyncValue<Value>) -> Bool {
-        lhs.state == rhs.state
-    }
-}
-
-// MARK: - CustomStringConvertible
-
-extension AsyncValue: CustomStringConvertible {
-    public var description: String {
-        switch state {
-        case .idle:
-            "AsyncValue(.idle)"
-        case .loading(let previous):
-            "AsyncValue(.loading(previous: \(String(describing: previous))))"
-        case .loaded(let value):
-            "AsyncValue(.loaded(\(value)))"
-        case .failed(let error):
-            "AsyncValue(.failed(\(error)))"
-        }
-    }
-}
-
-// MARK: - CustomDebugStringConvertible
-
-extension AsyncValue: CustomDebugStringConvertible {
-    public var debugDescription: String {
-        "AsyncValue<\(Value.self)>(state: \(state))"
+    /// 状態を書き戻す権利を取り、その番号を返す。
+    @discardableResult
+    private func claim() -> UInt64 {
+        generation &+= 1
+        return generation
     }
 }

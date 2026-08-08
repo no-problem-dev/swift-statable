@@ -2,6 +2,7 @@ import Testing
 @testable import Statable
 
 @Suite("AsyncValue Tests")
+@MainActor
 struct AsyncValueTests {
 
     // MARK: - Initialization
@@ -144,40 +145,157 @@ struct AsyncValueTests {
         #expect(value.value == 200)
     }
 
-    @Test("Reload loads when no value")
-    func reloadFromIdle() async {
-        let value = AsyncValue<Int>()
+    // MARK: - 失敗しても前の答えは捨てない
 
-        await value.reload {
-            7
-        }
-
-        #expect(value.value == 7)
-    }
-
-    @Test("Reload runs even when value exists")
-    func reloadReplacesExistingValue() async {
+    @Test("失敗しても、直前まで見せていた答えは残る")
+    func failureKeepsPreviousValue() async {
         let value = AsyncValue(initialValue: 100)
 
-        await value.reload {
-            200
-        }
-
-        // Unlike loadIfNeeded, reload always executes the operation
-        #expect(value.value == 200)
-    }
-
-    @Test("Reload failure transitions to failed even when value exists")
-    func reloadFailureFromLoaded() async {
-        let value = AsyncValue(initialValue: 100)
-
-        await value.reload {
-            throw TestError.simulated
-        }
+        await value.load { throw TestError.simulated }
 
         #expect(value.isFailed)
         #expect(value.error != nil)
+        // 見せるものはまだある。画面を奪うかどうかは画面が決める
+        #expect(value.value == 100)
+        // 「済んでいる」には数えない（loadIfNeeded はもう一度読みに行く）
+        #expect(!value.isLoaded)
+    }
+
+    @Test("前の答えが無いまま失敗したら、見せるものは無い")
+    func failureWithoutPreviousValue() async {
+        let value = AsyncValue<Int>()
+
+        await value.load { throw TestError.simulated }
+
+        #expect(value.isFailed)
         #expect(value.value == nil)
+    }
+
+    @Test("失敗の後に読み直すと、前の答えを持ったままのロード中になる")
+    func reloadAfterFailureIsReloading() async {
+        let value = AsyncValue(initialValue: 100)
+        await value.load { throw TestError.simulated }
+
+        value.startLoading()
+
+        #expect(value.isReloading)
+        #expect(!value.isInitialLoading)
+        #expect(value.value == 100)
+    }
+
+    // MARK: - 初回のロードと読み直しの区別
+
+    @Test("初回のロードは isInitialLoading、読み直しは isReloading")
+    func initialLoadingVsReloading() {
+        let first = AsyncValue<Int>()
+        first.startLoading()
+        #expect(first.isInitialLoading)
+        #expect(!first.isReloading)
+
+        let again = AsyncValue(initialValue: 1)
+        again.startLoading()
+        #expect(!again.isInitialLoading)
+        #expect(again.isReloading)
+    }
+
+    @Test("空の配列は「答えが無い」ではない")
+    func emptyCollectionIsAValue() {
+        let value = AsyncValue<[Int]>()
+        value.set([])
+        value.startLoading()
+
+        // 0 件の利用者だけが読み直しのたびに骨組みを見る、が起きないこと
+        #expect(value.hasValue)
+        #expect(!value.isInitialLoading)
+        #expect(value.isReloading)
+    }
+
+    // MARK: - 重なったロードは後から始まった方が勝つ
+
+    @Test("先に始まった遅いロードは、後から始まったロードの答えを上書きしない")
+    func laterLoadWins() async {
+        let value = AsyncValue<Int>()
+
+        async let slow: Void = value.load {
+            try? await Task.sleep(for: .milliseconds(60))
+            return 1
+        }
+        try? await Task.sleep(for: .milliseconds(10))
+        async let fast: Void = value.load { 2 }
+        _ = await (slow, fast)
+
+        #expect(value.value == 2)
+    }
+
+    @Test("先に始まった遅いロードの失敗が、後から始まった成功を塗り潰さない")
+    func staleFailureDoesNotOverwriteFreshSuccess() async {
+        let value = AsyncValue<Int>()
+
+        async let slow: Void = value.load {
+            try? await Task.sleep(for: .milliseconds(60))
+            throw TestError.simulated
+        }
+        try? await Task.sleep(for: .milliseconds(10))
+        async let fast: Void = value.load { 42 }
+        _ = await (slow, fast)
+
+        #expect(value.value == 42)
+        #expect(!value.isFailed)
+    }
+
+    @Test("明示的に置いた値は、走っている途中のロードより新しい")
+    func explicitSetWinsOverInFlightLoad() async {
+        let value = AsyncValue<Int>()
+
+        async let running: Void = value.load {
+            try? await Task.sleep(for: .milliseconds(40))
+            return 1
+        }
+        try? await Task.sleep(for: .milliseconds(10))
+        value.set(99)
+        await running
+
+        #expect(value.value == 99)
+    }
+
+    // MARK: - 取り消しは失敗にしない
+
+    @Test("取り消されたロードは失敗にならず、前の答えへ戻る")
+    func cancellationRestoresPreviousValue() async {
+        let value = AsyncValue(initialValue: 7)
+
+        let task = Task { @MainActor in
+            await value.load {
+                try await Task.sleep(for: .seconds(5))
+                return 8
+            }
+        }
+        try? await Task.sleep(for: .milliseconds(20))
+        task.cancel()
+        await task.value
+
+        #expect(!value.isFailed)
+        // ここが loading のまま残ると、回りっぱなしの表示になる
+        #expect(!value.isLoading)
+        #expect(value.value == 7)
+    }
+
+    @Test("前の答えが無いまま取り消されたら初期状態へ戻る")
+    func cancellationWithoutPreviousValueResetsToIdle() async {
+        let value = AsyncValue<Int>()
+
+        let task = Task { @MainActor in
+            await value.load {
+                try await Task.sleep(for: .seconds(5))
+                return 1
+            }
+        }
+        try? await Task.sleep(for: .milliseconds(20))
+        task.cancel()
+        await task.value
+
+        #expect(value.isIdle)
+        #expect(!value.isLoading)
     }
 }
 
