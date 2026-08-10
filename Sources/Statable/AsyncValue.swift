@@ -1,22 +1,23 @@
 import Observation
 
-/// 非同期でロードされる値を持つ、観測可能な容器。**メインアクターの上でだけ生きる。**
+/// An observable container for a value that is loaded asynchronously. **It lives only on the main actor.**
 ///
-/// ## なぜ `@MainActor` なのか
+/// ## Why `@MainActor`
 ///
-/// これは画面の状態そのもので、SwiftUI はメインアクターで読む。書き換えが別のスレッドから来ると、
-/// Observation の無効化通知もそのスレッドから飛ぶので、SwiftUI が取りこぼすことがある。
-/// **取りこぼすと画面は最後に描いた状態のまま止まる**（「読み込み中が消えない」として現れる）。
+/// This *is* the state of the screen, and SwiftUI reads it on the main actor. When a write arrives
+/// from another thread, Observation's invalidation is delivered from that thread too, so SwiftUI can
+/// drop it. **A dropped invalidation freezes the view on whatever it drew last** — which is what
+/// "the loading indicator never goes away" actually is.
 ///
-/// 1.x では `@unchecked Sendable` に「`@MainActor` で保護される前提」と注記していたが、
-/// `load(_:)` が `nonisolated` な `async` 関数だったので、`@MainActor` のストアから呼んでも
-/// 呼んだ瞬間に汎用エグゼキュータへ移り、`startLoading()` も `set()` もそこで走っていた
-/// （`AsyncValueIsolationTests` が実測で押さえている）。**前提は注記ではなく宣言で守る。**
+/// Up to 1.x this was `@unchecked Sendable` with a note saying it was "protected by `@MainActor`".
+/// But `load(_:)` was a `nonisolated async` function, so calling it even from a `@MainActor` store
+/// hopped onto the generic executor immediately, and `startLoading()` and `set()` ran there
+/// (`AsyncValueIsolationTests` measures this). **An assumption is kept by the declaration, not by a note.**
 ///
-/// 通信そのものは外へ出る —— `operation` は `@Sendable` なので、メインアクターを塞がない。
-/// メインに留まるのは状態の書き換えだけ。
+/// The call itself still leaves — `operation` is `@Sendable`, so it never blocks the main actor.
+/// Only the state writes stay behind.
 ///
-/// ## 使用例
+/// ## Example
 ///
 /// ```swift
 /// @Statable(UserProfile.self)
@@ -32,96 +33,94 @@ import Observation
 public final class AsyncValue<Value: Sendable> {
     // MARK: - State
 
-    /// 内部の状態（switch用に公開）
+    /// The exclusive state behind every convenience property, exposed so a view can switch on it.
     public private(set) var state: AsyncState<Value>
 
-    /// いま状態を書き戻してよい呼び出しの番号。
+    /// The number of the call that is currently allowed to write state back.
     ///
-    /// **後から始まった方が勝つ。** 同じ値へのロードが重なると、遅く始まった 1 本ではなく
-    /// 遅く終わった 1 本が勝ってしまい、新しい成功を古い失敗が塗り潰すことがある。
-    /// 開始した順に番号を振り、書き戻す前にまだ自分の番号かを確かめる。
+    /// **The last one started wins.** When loads for the same value overlap, the one that finishes
+    /// last would otherwise win instead of the one that started last, so an old failure can paint
+    /// over a newer success. Each start takes the next number, and a result is only written back
+    /// while that number is still current.
     ///
-    /// `set` / `setError` / `reset` / `startLoading` も番号を進める
-    /// —— 明示的に置かれた値は、走っている途中のロードより新しい情報だから。
+    /// `set` / `setError` / `reset` / `startLoading` take a number too — a value placed explicitly
+    /// is newer information than a load that is still running.
     private var generation: UInt64 = 0
 
     // MARK: - Initialization
 
-    /// 初期状態で作成
+    /// Creates a container that has not been asked for anything yet.
     public init() {
         self.state = .idle
     }
 
-    /// 初期値を指定して作成
-    /// - Parameter initialValue: 初期値（loaded状態で開始）
+    /// Creates a container that already holds a value, as if a load had just succeeded.
+    /// - Parameter initialValue: The value to start from.
     public init(initialValue: Value) {
         self.state = .loaded(initialValue)
     }
 
-    /// 指定した状態で作成
-    /// - Parameter state: 初期状態
+    /// Creates a container that starts in a state you choose.
+    /// - Parameter state: The state to start in.
     public init(state: AsyncState<Value>) {
         self.state = state
     }
 
     // MARK: - Computed Properties
 
-    /// いま見せられる値（`loading` / `failed` のときは直前の値）
+    /// The value that can be shown right now; during a reload or after a failure it is the previous one.
     public var value: Value? { state.value }
 
-    /// ロード中かどうか
     public var isLoading: Bool { state.isLoading }
 
-    /// まだ一度も答えを持たないままのロード中か（骨組みを出してよい唯一の状態）
+    /// Whether a load is in flight with nothing to show yet — the only state in which a skeleton belongs.
     public var isInitialLoading: Bool { state.isInitialLoading }
 
-    /// 前の答えを持ったままのロード中か（画面を空にしない）
+    /// Whether a load is in flight while the previous value is still shown. Use it to avoid emptying the screen.
     public var isReloading: Bool { state.isReloading }
 
-    /// エラー（failed状態の場合のみ）
+    /// The error from the last load, or nil unless that load failed.
     public var error: StateError? { state.error }
 
-    /// 見せられる値があるか
+    /// Whether there is anything to show, including a value kept through a reload or a failure.
     public var hasValue: Bool { state.hasValue }
 
-    /// 最後のロードが成功して終わっているか
+    /// Whether the last load finished successfully. A value left over from before a failure does not count.
     public var isLoaded: Bool { state.isLoaded }
 
-    /// 初期状態かどうか
     public var isIdle: Bool { state.isIdle }
 
-    /// 失敗状態かどうか
     public var isFailed: Bool { state.isFailed }
 
     // MARK: - State Transitions
 
-    /// 値を設定（loaded状態に遷移）
-    /// - Parameter value: 設定する値
+    /// Stores a value directly, superseding a load that is still in flight.
+    /// - Parameter value: The value to show.
     public func set(_ value: Value) {
         claim()
         state = .loaded(value)
     }
 
-    /// エラーを設定（failed状態に遷移・前の値は保つ）
-    /// - Parameter error: 発生したエラー
+    /// Records a failure while keeping the previous value, and supersedes a load that is still in flight.
+    /// - Parameter error: The failure to record.
     public func setError(_ error: StateError) {
         claim()
         state.fail(with: error)
     }
 
-    /// 標準のErrorからStateErrorに変換して設定
-    /// - Parameter error: 発生したエラー
+    /// Converts an arbitrary error into a structured one and records it.
+    /// - Parameter error: The error to convert.
     public func setError(from error: Error) {
         setError(StateError(from: error))
     }
 
-    /// ロード開始（loading状態に遷移・前の値は保つ）
+    /// Marks a load as started, keeping the previous value so the screen stays filled.
     public func startLoading() {
         claim()
         state.startLoading()
     }
 
-    /// 初期状態にリセット
+    /// Drops the value and the error, and abandons a load that is still in flight.
     public func reset() {
         claim()
         state.reset()
@@ -129,12 +128,12 @@ public final class AsyncValue<Value: Sendable> {
 
     // MARK: - Convenience Methods
 
-    /// 非同期操作を実行し、結果を状態に反映する。
+    /// Runs an async operation and reflects its outcome in the state.
     ///
-    /// ロード開始・成功・失敗・取り消しの遷移をここが引き受ける。
+    /// Starting, succeeding, failing and being cancelled are all handled here.
     ///
-    /// - 重なったロードは**後から始まった方が勝つ**（古い方は結果を捨てて黙って抜ける）
-    /// - 取り消し（`Task` のキャンセル）は失敗にしない。前の答えへ戻す
+    /// - When loads overlap, **the last one started wins** (the older one drops its result and returns quietly)
+    /// - Cancellation (a cancelled `Task`) is not a failure. The previous value comes back
     ///
     /// ```swift
     /// await store.profile.load {
@@ -142,7 +141,7 @@ public final class AsyncValue<Value: Sendable> {
     /// }
     /// ```
     ///
-    /// - Parameter operation: 実行する非同期操作
+    /// - Parameter operation: The work to run.
     public func load(_ operation: @Sendable () async throws -> Value) async {
         let token = claim()
         state.startLoading()
@@ -152,10 +151,11 @@ public final class AsyncValue<Value: Sendable> {
             state = .loaded(value)
         } catch {
             guard token == generation else { return }
-            // やめただけのものを失敗として見せない。**同時に、取り消しで `loading` に
-            // 取り残されるのも防ぐ**（画面を離れて戻ると回りっぱなし、の正体）。
-            // URLSession は取り消しを `URLError(.cancelled)` で返すので、
-            // 投げられた型ではなくタスクの現在地で判断する。
+            // Do not show something that was merely stopped as a failure. At the same time,
+            // do not let a cancellation strand the state in `loading` — that is what "leave the
+            // screen, come back, and the spinner is still going" really is.
+            // URLSession reports cancellation as `URLError(.cancelled)`, so decide from where the
+            // task stands rather than from the type that was thrown.
             if Task.isCancelled || error is CancellationError {
                 state.cancelLoading()
             } else {
@@ -164,17 +164,17 @@ public final class AsyncValue<Value: Sendable> {
         }
     }
 
-    /// まだ一度も成功していないときだけロードする。
+    /// Loads only when no load has succeeded yet.
     ///
-    /// 失敗して前の値だけが残っている状態は「済んでいる」に数えない（もう一度読みに行く）。
+    /// A failure that left the previous value behind does not count as done, so it is read again.
     ///
-    /// - Parameter operation: 実行する非同期操作
+    /// - Parameter operation: The work to run.
     public func loadIfNeeded(_ operation: @Sendable () async throws -> Value) async {
         guard !isLoaded else { return }
         await load(operation)
     }
 
-    /// 状態を書き戻す権利を取り、その番号を返す。
+    /// Takes the right to write state back and returns the number that grants it.
     @discardableResult
     private func claim() -> UInt64 {
         generation &+= 1

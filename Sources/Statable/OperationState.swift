@@ -1,14 +1,14 @@
 import Observation
 
-/// 複数の並行操作を追跡するための状態管理。**メインアクターの上でだけ生きる**（理由は ``AsyncValue`` と同じ）。
+/// Tracks several concurrent operations one by one. **It lives only on the main actor** (for the same reason ``AsyncValue`` does).
 ///
-/// 個別の操作ごとに実行状態とエラーを追跡できます。
+/// Each operation keeps its own running state and its own last error.
 ///
-/// 1.x では `run(_:task:)` も `nonisolated` な `async` 関数だったので、`start` / `complete` /
-/// `fail` が汎用エグゼキュータで走り、SwiftUI が読んでいる `activeOperations` を
-/// 別スレッドから書き換えていた。押しているあいだのスピナーが消えない形で現れる。
+/// Up to 1.x `run(_:task:)` was a `nonisolated async` function too, so `start` / `complete` /
+/// `fail` ran on the generic executor and wrote to `activeOperations` — which SwiftUI is reading —
+/// from another thread. It showed up as a spinner on the button that never went away.
 ///
-/// ## 使用例
+/// ## Example
 ///
 /// ```swift
 /// @Statable([WorkoutActivity].self)
@@ -23,13 +23,13 @@ import Observation
 ///     @Track(Operation.self) var operations
 /// }
 ///
-/// // 操作の開始・完了
+/// // Starting and completing an operation
 /// store.operations.start(.fetch)
 /// store.operations.complete(.fetch)
 ///
-/// // 状態の確認
+/// // Checking the state
 /// if store.operations.isActive(.recordStrength) {
-///     ProgressView("記録中...")
+///     ProgressView("Recording…")
 /// }
 /// ```
 @MainActor
@@ -37,104 +37,95 @@ import Observation
 public final class OperationTracker<Operation: Hashable & Sendable> {
     // MARK: - State
 
-    /// 実行中の操作
     private var activeOperations: Set<Operation> = []
 
-    /// 操作ごとのエラー
     private var errors: [Operation: StateError] = [:]
 
     // MARK: - Initialization
 
-    /// 空の状態でトラッカーを作成
+    /// Creates a tracker with nothing running and no errors recorded.
     public init() {}
 
     // MARK: - Operation Management
 
-    /// 操作を開始
-    /// - Parameter operation: 開始する操作
+    /// Marks an operation as running and clears the error left over from its last attempt.
+    /// - Parameter operation: The operation that is starting.
     public func start(_ operation: Operation) {
         activeOperations.insert(operation)
         errors.removeValue(forKey: operation)
     }
 
-    /// 操作を完了
-    /// - Parameter operation: 完了した操作
+    /// Marks an operation as no longer running, leaving any recorded error untouched.
+    /// - Parameter operation: The operation that finished.
     public func complete(_ operation: Operation) {
         activeOperations.remove(operation)
     }
 
-    /// 操作を失敗として終了
+    /// Stops tracking an operation as running and records why it failed.
     /// - Parameters:
-    ///   - operation: 失敗した操作
-    ///   - error: 発生したエラー
+    ///   - operation: The operation that failed.
+    ///   - error: The failure to record.
     public func fail(_ operation: Operation, with error: StateError) {
         activeOperations.remove(operation)
         errors[operation] = error
     }
 
-    /// 操作を失敗として終了（標準Errorから変換）
+    /// Stops tracking an operation as running and records an arbitrary error, converted on the way in.
     /// - Parameters:
-    ///   - operation: 失敗した操作
-    ///   - error: 発生したエラー
+    ///   - operation: The operation that failed.
+    ///   - error: The error to convert and record.
     public func fail(_ operation: Operation, with error: Error) {
         fail(operation, with: StateError(from: error))
     }
 
     // MARK: - Query Methods
 
-    /// 特定の操作が実行中かどうか
-    /// - Parameter operation: 確認する操作
-    /// - Returns: 実行中の場合 true
     public func isActive(_ operation: Operation) -> Bool {
         activeOperations.contains(operation)
     }
 
-    /// いずれかの操作が実行中かどうか
     public var hasActiveOperations: Bool {
         !activeOperations.isEmpty
     }
 
-    /// 実行中の操作の一覧
+    /// The operations running right now, as a snapshot you can iterate over.
     public var active: Set<Operation> {
         activeOperations
     }
 
-    /// 特定の操作のエラーを取得
-    /// - Parameter operation: 確認する操作
-    /// - Returns: エラー（存在する場合）
+    /// The error left by an operation's last attempt, which its next start clears.
+    /// - Parameter operation: The operation to ask about.
     public func error(for operation: Operation) -> StateError? {
         errors[operation]
     }
 
-    /// いずれかの操作でエラーが発生しているか
     public var hasErrors: Bool {
         !errors.isEmpty
     }
 
-    /// 全てのエラー
+    /// Every error still on record, keyed by the operation that produced it.
     public var allErrors: [Operation: StateError] {
         errors
     }
 
     // MARK: - Error Management
 
-    /// 特定の操作のエラーをクリア
-    /// - Parameter operation: エラーをクリアする操作
+    /// Clears one operation's error, for a retry button that should reset the message before running again.
+    /// - Parameter operation: The operation whose error to clear.
     public func clearError(for operation: Operation) {
         errors.removeValue(forKey: operation)
     }
 
-    /// 全てのエラーをクリア
     public func clearAllErrors() {
         errors.removeAll()
     }
 
     // MARK: - Convenience Methods
 
-    /// 操作を実行し、結果を自動的に追跡
+    /// Runs a task and tracks its start, finish and failure for you.
     ///
-    /// 取り消し（`Task` のキャンセル）は失敗として記録しない。やめただけのものを
-    /// 赤い字で見せると、押した覚えのない失敗が画面に残る。
+    /// Cancellation (a cancelled `Task`) is not recorded as a failure. Showing something that was
+    /// merely called off in red leaves a failure on screen that nobody remembers asking for.
     ///
     /// ```swift
     /// await store.operations.run(.fetch) {
@@ -143,9 +134,9 @@ public final class OperationTracker<Operation: Hashable & Sendable> {
     /// ```
     ///
     /// - Parameters:
-    ///   - operation: 追跡する操作
-    ///   - task: 実行するタスク
-    /// - Returns: タスクの結果。取り消されたときは `nil`
+    ///   - operation: The operation to track.
+    ///   - task: The work to run.
+    /// - Returns: The outcome of the task, or `nil` when it was cancelled.
     @discardableResult
     public func run<T: Sendable>(
         _ operation: Operation,
@@ -167,10 +158,11 @@ public final class OperationTracker<Operation: Hashable & Sendable> {
         }
     }
 
-    /// 操作を実行し、結果を ``AsyncValue`` に設定する。
+    /// Runs a task and puts its result into an ``AsyncValue``.
     ///
-    /// 遷移の規則（重なりの扱い・取り消しの扱い）は ``AsyncValue/load(_:)`` が持っているので、
-    /// ここはそれに委ねて、操作の追跡だけを足す。**同じ規則を 2 か所に書かない。**
+    /// The transition rules — how overlaps settle, how cancellation is handled — belong to
+    /// ``AsyncValue/load(_:)``, so this defers to them and only adds the operation tracking.
+    /// **The same rule is not written in two places.**
     ///
     /// ```swift
     /// await store.operations.run(.fetch, into: store.activities) {
@@ -179,9 +171,9 @@ public final class OperationTracker<Operation: Hashable & Sendable> {
     /// ```
     ///
     /// - Parameters:
-    ///   - operation: 追跡する操作
-    ///   - asyncValue: 結果を設定するAsyncValue
-    ///   - task: 実行するタスク
+    ///   - operation: The operation to track.
+    ///   - asyncValue: The container that receives the result.
+    ///   - task: The work to run.
     public func run<T: Sendable>(
         _ operation: Operation,
         into asyncValue: AsyncValue<T>,
@@ -196,8 +188,8 @@ public final class OperationTracker<Operation: Hashable & Sendable> {
         }
     }
 
-    /// 取り消しか。URLSession は取り消しを `URLError(.cancelled)` で返すので、
-    /// 投げられた型ではなくタスクの現在地でも判断する。
+    /// Whether the work was called off. URLSession reports cancellation as `URLError(.cancelled)`,
+    /// so this also decides from where the task stands rather than from the type that was thrown.
     private func isCancellation(_ error: Error) -> Bool {
         Task.isCancelled || error is CancellationError
     }

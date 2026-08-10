@@ -1,41 +1,41 @@
 import SwiftSyntax
 import SwiftSyntaxMacros
 
-/// @Statable マクロの実装
+/// The implementation of the `@Statable` macro.
 ///
-/// クラスに AsyncValue のラッパー機能を自動生成:
-/// - 内部 AsyncValue ストレージ
-/// - パススルー properties (value, state, isLoading, etc.)
-/// - パススルー methods (set, startLoading, load, etc.)
-/// - Statable, Sendable プロトコルへの準拠
+/// It gives a class the wrapper members of an AsyncValue:
+/// - the AsyncValue storage behind them
+/// - pass-through properties (value, state, isLoading, and so on)
+/// - pass-through methods (set, startLoading, load, and so on)
+/// - conformance to the Statable and Sendable protocols
 ///
-/// オプションで OperationTracker も生成:
-/// - 内部 OperationTracker ストレージ
-/// - operations プロパティ
+/// It optionally generates an OperationTracker as well:
+/// - the OperationTracker storage
+/// - the operations property
 public struct StatableMacro: MemberMacro, ExtensionMacro {
 
     // MARK: - MemberMacro
 
-    /// メンバー（AsyncValue関連のプロパティとメソッド）を生成
+    /// Generates the members that pass through to the stored AsyncValue.
     public static func expansion(
         of node: AttributeSyntax,
         providingMembersOf declaration: some DeclGroupSyntax,
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
-        // クラス宣言であることを確認
+        // Only a class can hold the generated members.
         guard declaration.as(ClassDeclSyntax.self) != nil else {
             throw StatableMacroError.notAClass
         }
 
-        // 引数を抽出
+        // Pull the types out of the attribute.
         let args = try extractArguments(from: node)
         let valueType = args.valueType
         let operationType = args.operationType
 
         var members: [DeclSyntax] = []
 
-        // 1. 内部 AsyncValue ストレージ
+        // 1. The AsyncValue storage
         members.append(
             """
             @ObservationIgnored
@@ -43,7 +43,7 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
             """
         )
 
-        // 2. 内部 OperationTracker ストレージ（operationType指定時のみ）
+        // 2. The OperationTracker storage, only when an operation type was given
         if let opType = operationType {
             members.append(
                 """
@@ -53,75 +53,72 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
             )
         }
 
-        // 3. Computed Properties (パススルー)
+        // 3. Pass-through computed properties
         members.append(contentsOf: [
             """
-            /// 現在の値
+            /// The value that can be shown right now; during a reload or after a failure it is the previous one.
             public var value: \(raw: valueType)? {
                 _asyncValue.value
             }
             """,
             """
-            /// 内部状態（switch用）
+            /// The exclusive state behind every convenience property, exposed so a view can switch on it.
             public var state: AsyncState<\(raw: valueType)> {
                 _asyncValue.state
             }
             """,
             """
-            /// ロード中かどうか
             public var isLoading: Bool {
                 _asyncValue.isLoading
             }
             """,
             """
-            /// まだ一度も答えを持たないままのロード中か（骨組みを出してよい唯一の状態）
+            /// Whether a load is in flight with nothing to show yet — the only state in which a skeleton belongs.
             public var isInitialLoading: Bool {
                 _asyncValue.isInitialLoading
             }
             """,
             """
-            /// 前の答えを持ったままのロード中か（画面を空にしない）
+            /// Whether a load is in flight while the previous value is still shown. Use it to avoid emptying the screen.
             public var isReloading: Bool {
                 _asyncValue.isReloading
             }
             """,
             """
-            /// 初期状態かどうか
             public var isIdle: Bool {
                 _asyncValue.isIdle
             }
             """,
             """
-            /// 失敗状態かどうか
             public var isFailed: Bool {
                 _asyncValue.isFailed
             }
             """,
             """
-            /// 見せられる値があるか（`loading` / `failed` でも前の値があれば true）
+            /// Whether there is anything to show, including a value kept through a reload or a failure.
             public var hasValue: Bool {
                 _asyncValue.hasValue
             }
             """,
             """
-            /// 最後のロードが成功して終わっているか
+            /// Whether the last load finished successfully. A value left over from before a failure does not count.
             public var isLoaded: Bool {
                 _asyncValue.isLoaded
             }
             """,
             """
-            /// エラー（failed状態の場合のみ）
+            /// The error from the last load, or nil unless that load failed.
             public var error: StateError? {
                 _asyncValue.error
             }
             """,
         ])
 
-        // 4. Operations プロパティ（operationType指定時のみ）
+        // 4. The operations property, only when an operation type was given
         if let opType = operationType {
             members.append(
                 """
-                /// 操作トラッカー
+                /// The running state and last error of each declared operation.
                 public var operations: OperationTracker<\(raw: opType)> {
                     _operations
                 }
@@ -129,40 +126,40 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
             )
         }
 
-        // 5. Methods (パススルー)
+        // 5. Pass-through methods
         members.append(contentsOf: [
             """
-            /// 値を設定（loaded状態に遷移）
+            /// Stores a value directly, superseding a load that is still in flight.
             public func set(_ value: \(raw: valueType)) {
                 _asyncValue.set(value)
             }
             """,
             """
-            /// エラーを設定（failed状態に遷移）
+            /// Records a failure while keeping the previous value, and supersedes a load that is still in flight.
             public func setError(_ error: StateError) {
                 _asyncValue.setError(error)
             }
             """,
             """
-            /// ロード開始（loading状態に遷移）
+            /// Marks a load as started, keeping the previous value so the screen stays filled.
             public func startLoading() {
                 _asyncValue.startLoading()
             }
             """,
             """
-            /// 初期状態にリセット
+            /// Drops the value and the error, and abandons a load that is still in flight.
             public func reset() {
                 _asyncValue.reset()
             }
             """,
             """
-            /// 非同期操作を実行し、結果を状態に反映
+            /// Runs an async operation and reflects its outcome; the last load started wins and cancellation is not a failure.
             public func load(_ operation: @Sendable () async throws -> \(raw: valueType)) async {
                 await _asyncValue.load(operation)
             }
             """,
             """
-            /// まだ一度も成功していないときだけロード
+            /// Loads only when no load has succeeded yet; a failure that left a previous value behind does not count as done.
             public func loadIfNeeded(_ operation: @Sendable () async throws -> \(raw: valueType)) async {
                 await _asyncValue.loadIfNeeded(operation)
             }
@@ -174,7 +171,7 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
 
     // MARK: - ExtensionMacro
 
-    /// プロトコル準拠のためのextensionを生成
+    /// Generates the extension that carries the protocol conformance.
     public static func expansion(
         of node: AttributeSyntax,
         attachedTo declaration: some DeclGroupSyntax,
@@ -193,7 +190,7 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
 
     // MARK: - Helper Methods
 
-    /// マクロ引数から型を抽出
+    /// Extracts the value type and the optional operation type from the attribute's arguments.
     private static func extractArguments(from node: AttributeSyntax) throws -> (valueType: String, operationType: String?) {
         guard let arguments = node.arguments,
               case .argumentList(let argList) = arguments else {
@@ -204,14 +201,14 @@ public struct StatableMacro: MemberMacro, ExtensionMacro {
         var operationType: String?
 
         for arg in argList {
-            // ラベルなしの第1引数 = valueType
+            // The unlabelled first argument is the value type.
             if arg.label == nil {
                 if let memberAccess = arg.expression.as(MemberAccessExprSyntax.self),
                    let base = memberAccess.base {
                     valueType = base.trimmedDescription
                 }
             }
-            // operations: ラベル付き引数 = operationType
+            // The argument labelled `operations:` is the operation type.
             else if arg.label?.text == "operations" {
                 if let memberAccess = arg.expression.as(MemberAccessExprSyntax.self),
                    let base = memberAccess.base {

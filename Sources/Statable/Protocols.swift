@@ -2,17 +2,17 @@ import Observation
 
 // MARK: - Statable
 
-/// 状態コンテナとして振る舞うための基本プロトコル。
+/// What a type has to be before it can hold view state.
 ///
-/// `@Statable` マクロを適用したクラスが自動的に準拠する。
+/// A class annotated with the `@Statable` macro conforms to this automatically.
 ///
-/// ## 準拠による保証
+/// ## What conformance guarantees
 ///
-/// - `@MainActor`（またはグローバルアクター）で保護される
-/// - `@Observable` として動作する
-/// - `Sendable` に準拠する
+/// - It is protected by `@MainActor` (or another global actor)
+/// - It behaves as `@Observable`
+/// - It is `Sendable`
 ///
-/// ## 使用例
+/// ## Example
 ///
 /// ```swift
 /// @Statable(MetabolicProfile.self)
@@ -20,10 +20,10 @@ import Observation
 /// final class ProfileStore {
 ///     public init() {}
 /// }
-/// // ProfileStore は自動的に Statable に準拠
+/// // ProfileStore conforms to Statable without being told to
 /// ```
 ///
-/// - Note: 中身の ``AsyncValue`` と ``OperationTracker`` は `@MainActor` なので、
-///   `@MainActor` を付けないクラスに `@Statable` を付けると**コンパイルが通らない**。
-///   これは意図した設計で、実行時に競合する代わりに書いた時点で分かるようにしてある。
+/// - Note: The ``AsyncValue`` and ``OperationTracker`` inside are `@MainActor`, so putting
+///   `@Statable` on a class that is not `@MainActor` **will not compile**. That is the intent:
+///   you find out while writing it instead of racing at runtime.
 public protocol Statable: AnyObject, Observable, Sendable {}

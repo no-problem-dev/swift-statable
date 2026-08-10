@@ -1,164 +1,154 @@
-# AsyncState ガイド
+# AsyncState Guide
 
-排他的な非同期状態表現の詳細な使い方。
+Working with the exclusive state of an asynchronously loaded value.
 
 ## Overview
 
-`AsyncState<T>`は、非同期でロードされる値の状態を排他的に表現するenum。
-SSOT（Single Source of Truth）原則に基づき、1つのenumで全ての状態を排他的に表現する。
+``AsyncState`` is the enum that expresses the state of a value being loaded asynchronously. It is
+a single source of truth: one enum holds every state, and the states are exclusive, so no two of
+them can be true at once.
 
-## 状態の種類
+## The cases
 
 ```swift
 public enum AsyncState<Value: Sendable>: Sendable {
-    case idle                       // 初期状態
-    case loading(previous: Value?)  // ロード中（前回の値を保持可能）
-    case loaded(Value)              // ロード成功
-    case failed(StateError)         // ロード失敗
+    case idle                                  // nothing asked for yet
+    case loading(previous: Value?)             // in flight, carrying what was on screen
+    case loaded(Value)                         // finished successfully
+    case failed(StateError, previous: Value?)  // failed, still carrying what was on screen
 }
 ```
 
-### idle - 初期状態
+### idle
 
-まだデータがロードされていない状態。アプリ起動直後や、
-明示的にリセットした後がこれに該当する。
+Nothing has been asked for yet: just after launch, or after an explicit reset.
 
 ```swift
 if store.isIdle {
-    Text("データ未取得")
+    Button("Load") { Task { await store.load { try await api.fetchProfile() } } }
 }
 ```
 
-### loading - ロード中
+### loading
 
-データを取得中の状態。`previous`パラメータにより、
-リロード時に前回の値を保持できる。
-ローディング中も前回のデータを表示し続けるUXが可能。
+A load is in flight. `previous` carries whatever was already on screen, so a reload can keep
+showing the last answer instead of blanking out.
 
 ```swift
-case .loading(let previous):
-    VStack {
-        ProgressView()
-        if let prev = previous {
-            // リロード中も前回のデータを薄く表示
-            ContentView(data: prev)
-                .opacity(0.5)
-        }
-    }
+if store.isInitialLoading {
+    Skeleton()              // nothing to show yet — a skeleton is honest here
+} else if store.isReloading {
+    Content(store.value!)   // keep the previous answer up and swap it quietly
+}
 ```
 
-### loaded - ロード成功
+### loaded
 
-データの取得に成功した状態。値に直接アクセスできる。
+The load finished successfully. This is the only case that counts as done for `loadIfNeeded(_:)`.
 
 ```swift
 case .loaded(let profile):
     ProfileView(profile: profile)
 ```
 
-### failed - ロード失敗
+### failed
 
-エラーが発生した状態。`StateError`にエラーの詳細情報を含む。
+The load failed. The failure comes with a ``StateError``, and `previous` still holds whatever was
+on screen — a failure does not take the screen away by itself.
 
 ```swift
-case .failed(let error):
-    VStack {
-        Image(systemName: "exclamationmark.triangle")
-        Text(error.localizedMessage)
-        Button("再試行") {
-            Task { await store.reload { ... } }
-        }
+case .failed(let error, let previous):
+    if let previous {
+        Content(previous)
+        Banner(error)
+    } else {
+        FailureFace(error)
     }
 ```
 
-## 便利なプロパティ
+## Convenience properties
 
-`AsyncState`には状態を簡単に確認するためのプロパティがある：
-
-| プロパティ | 説明 |
-|----------|------|
-| `value` | 現在の値（`loaded`または`loading`の`previous`） |
-| `isLoading` | `loading`状態かどうか |
-| `isIdle` | `idle`状態かどうか |
-| `isFailed` | `failed`状態かどうか |
-| `hasValue` | `loaded`状態かどうか |
-| `error` | エラー（`failed`状態の場合のみ） |
+| Property | What it tells you |
+|----------|-------------------|
+| `value` | What can be shown now: the loaded value, or the previous one during a reload or after a failure |
+| `hasValue` | Whether there is anything to show at all |
+| `isLoading` | Whether a load is in flight |
+| `isInitialLoading` | In flight with nothing to show yet — the only state in which a skeleton belongs |
+| `isReloading` | In flight with the previous value still shown |
+| `isLoaded` | Whether the last load finished successfully; a value left over from before a failure does not count |
+| `isIdle` | Whether nothing has been asked for yet |
+| `isFailed` | Whether the last load failed |
+| `error` | The failure from the last load |
 
 ## AsyncValue
 
-`AsyncValue<T>`は、`AsyncState<T>`を内部で保持する`@Observable`なラッパークラス。
-`@Statable`マクロはこれを内部で使用する。
+``AsyncValue`` is the `@Observable` class that holds an ``AsyncState`` for you; `@Statable` uses
+one internally. It is `@MainActor`, because it is view state and SwiftUI reads it there.
 
-### 状態遷移メソッド
+### Transitions
 
 ```swift
-// 値を設定（loaded状態に遷移）
+// Store a value directly
 store.set(newProfile)
 
-// エラーを設定（failed状態に遷移）
-store.setError(.notFound(resource: "プロファイル"))
+// Record a failure, keeping the previous value on screen
+store.setError(.notFound(resource: "profile"))
 
-// ローディング開始（loading状態に遷移）
+// Mark a load as started, keeping the previous value on screen
 store.startLoading()
 
-// 初期状態にリセット（idle状態に遷移）
+// Drop the value and the error
 store.reset()
 ```
 
-### 便利メソッド
+Each of these supersedes a load that is still in flight: a value you placed explicitly is newer
+information than work that has not come back yet.
+
+### Running the work for you
 
 ```swift
-// 非同期操作を実行し、結果を状態に反映
+// Run and reflect the outcome
 await store.load {
     try await api.fetchProfile()
 }
 
-// 値がない場合のみロード
+// Load only when no load has succeeded yet
 await store.loadIfNeeded {
     try await api.fetchProfile()
 }
-
-// 強制リロード
-await store.reload {
-    try await api.fetchProfile()
-}
 ```
 
-## ベストプラクティス
+`load(_:)` settles overlapping loads so that the last one started wins, and treats cancellation as
+neither success nor failure — the previous value comes back rather than an error appearing or the
+state being stranded in `loading`.
 
-### switch文での完全なハンドリング
+## Best practices
 
-全ての状態を明示的にハンドリングすることで、状態の漏れを防ぐ：
+### Render three faces, not four cases
+
+Switching over all four cases is fine when each really does need its own layout, but most screens
+want this instead:
 
 ```swift
-switch store.state {
-case .idle:
-    // 初期表示
-case .loading(let previous):
-    // ローディング表示（前回の値があれば利用）
-case .loaded(let value):
-    // メインコンテンツ
-case .failed(let error):
-    // エラー表示とリトライUI
+if let value = store.value {
+    Content(value)                                  // during a reload, and after a failure
+    if let error = store.error { Banner(error) }    // a failure speaks in a banner
+} else if let error = store.error {
+    FailureFace(error)                              // only when there is nothing to show
+} else {
+    Skeleton()                                      // no answer yet
 }
 ```
 
-### 条件付きレンダリング
+### An empty collection is an answer
 
-簡単な条件分岐には便利プロパティを使用：
+Never read `value?.isEmpty` as "there is no value". An empty array means "none", which is a real
+answer — treating it as missing makes users with zero items, and only those users, watch a
+skeleton on every refresh.
 
-```swift
-if store.isLoading {
-    ProgressView()
-}
-
-if let profile = store.value {
-    Text(profile.name)
-}
-```
-
-## 関連項目
+## See Also
 
 - ``AsyncState``
 - ``AsyncValue``
 - ``StateError``
+- <doc:DesignPrinciples>

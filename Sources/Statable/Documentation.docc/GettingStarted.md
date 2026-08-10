@@ -1,40 +1,15 @@
-# はじめに
+# Getting Started
 
-Statableを使って非同期状態を管理する基本的な方法を学ぶ。
+Learn the basics of managing asynchronous state with Statable.
 
 ## Overview
 
-StatableはSwiftUIアプリケーションで非同期状態を型安全に管理するライブラリ。
-`@Statable`マクロにより、状態管理のボイラープレートを大幅に削減できる。
+Statable manages asynchronous state in a SwiftUI application in a type-safe way. The `@Statable`
+macro removes most of the boilerplate that state handling otherwise spreads across a store.
 
-## インストール
+## Defining a store
 
-### Swift Package Manager
-
-`Package.swift`に以下を追加する：
-
-```swift
-dependencies: [
-    .package(url: "https://github.com/no-problem-dev/swift-statable.git", from: "1.0.2")
-]
-```
-
-ターゲットに追加：
-
-```swift
-.target(
-    name: "YourTarget",
-    dependencies: [
-        .product(name: "Statable", package: "swift-statable")
-    ]
-)
-```
-
-## 基本的な使い方
-
-### Storeの定義
-
-`@Statable`マクロを使用してStoreを定義する：
+Apply the `@Statable` macro to a class, together with `@MainActor` and `@Observable`:
 
 ```swift
 import Statable
@@ -46,36 +21,46 @@ final class ProfileStore {
 }
 ```
 
-このマクロにより、以下のプロパティとメソッドが自動生成される：
+The macro is `@MainActor`-only by construction: the ``AsyncValue`` it generates lives on the main
+actor, so leaving `@MainActor` off does not compile. That is deliberate — you find out while
+writing the store instead of racing at runtime.
 
-| プロパティ | 型 | 説明 |
-|----------|------|------|
-| `value` | `T?` | 現在の値 |
-| `state` | `AsyncState<T>` | 状態（switch用） |
-| `isLoading` | `Bool` | ローディング中か |
-| `hasValue` | `Bool` | 値が存在するか |
-| `error` | `StateError?` | エラー |
+These members are generated for you:
 
-### データのロード
+| Property | Type | What it tells you |
+|----------|------|-------------------|
+| `value` | `T?` | What can be shown now — the previous value survives a reload and a failure |
+| `state` | `AsyncState<T>` | The exclusive state, for switching over every case |
+| `isLoading` | `Bool` | Whether a load is in flight |
+| `isInitialLoading` | `Bool` | In flight with nothing to show yet — the only state for a skeleton |
+| `isReloading` | `Bool` | In flight with the previous value still shown — do not empty the screen |
+| `hasValue` | `Bool` | Whether there is anything to show at all |
+| `isLoaded` | `Bool` | Whether the last load finished successfully |
+| `error` | `StateError?` | The failure from the last load |
+
+along with `set(_:)`, `setError(_:)`, `startLoading()`, `reset()`, `load(_:)` and `loadIfNeeded(_:)`.
+
+## Loading data
 
 ```swift
-// 非同期操作を実行
+// Run the work and reflect its outcome
 await store.load {
     try await api.fetchProfile()
 }
 
-// 値がない場合のみロード
+// Load only when no load has succeeded yet
 await store.loadIfNeeded {
-    try await api.fetchProfile()
-}
-
-// 強制リロード
-await store.reload {
     try await api.fetchProfile()
 }
 ```
 
-### Viewでの使用
+`load(_:)` handles the awkward parts for you. Overlapping loads settle so that the last one
+started wins, and a cancelled load returns to the previous value rather than showing an error or
+being stranded in `loading`.
+
+## Rendering in a view
+
+The reliable shape is three faces, not four cases:
 
 ```swift
 struct ProfileView: View {
@@ -83,33 +68,24 @@ struct ProfileView: View {
 
     var body: some View {
         VStack {
-            switch store.state {
-            case .idle:
-                Text("データ未取得")
-                Button("取得") {
-                    Task {
-                        await store.load {
-                            try await api.fetchProfile()
-                        }
-                    }
-                }
-
-            case .loading(let previous):
-                ProgressView()
-                if let prev = previous {
-                    Text("前回: \(prev.name)")
+            if let profile = store.value {
+                Text("Hello, \(profile.name)")
+                if let error = store.error {
+                    Text(error.localizedMessage)
                         .foregroundStyle(.secondary)
                 }
-
-            case .loaded(let profile):
-                Text("こんにちは、\(profile.name)さん")
-
-            case .failed(let error):
-                VStack {
-                    Text("エラー: \(error.localizedMessage)")
-                    Button("再試行") {
-                        Task { await store.reload { try await api.fetchProfile() } }
+            } else if let error = store.error {
+                Text(error.localizedMessage)
+                if error.isRetryable {
+                    Button("Try again") {
+                        Task { await store.load { try await api.fetchProfile() } }
                     }
+                }
+            } else if store.isInitialLoading {
+                ProgressView()
+            } else {
+                Button("Load") {
+                    Task { await store.load { try await api.fetchProfile() } }
                 }
             }
         }
@@ -117,9 +93,13 @@ struct ProfileView: View {
 }
 ```
 
-## 操作トラッキング
+Because `value` returns the previous value in `loading` **and** in `failed`, one check answers
+"is there anything to show". Do not decide from `isLoading` alone — being in flight is not a
+reason to empty the screen.
 
-複数の操作を個別に追跡する場合は、`operations`パラメータを使用する：
+## Tracking several operations
+
+When one store performs several distinct operations, pass the `operations` argument:
 
 ```swift
 enum DataOperation: String, CaseIterable, Sendable {
@@ -137,9 +117,10 @@ final class ItemStore {
 }
 ```
 
-詳細は <doc:OperationTrackerGuide> 参照。
+See <doc:OperationTrackerGuide> for the details.
 
-## 次のステップ
+## Next steps
 
-- <doc:AsyncStateGuide>: AsyncStateの詳細な使い方
-- <doc:OperationTrackerGuide>: 複数操作の追跡方法
+- <doc:DesignPrinciples>: why the library is shaped this way
+- <doc:AsyncStateGuide>: working with `AsyncState` directly
+- <doc:OperationTrackerGuide>: tracking several operations at once

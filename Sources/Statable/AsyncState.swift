@@ -1,50 +1,50 @@
-/// 非同期でロードされる値の状態。1つの enum が全てを排他的に表す（SSOT）。
+/// The state of a value that is loaded asynchronously, held as one exclusive enum so there is a single source of truth.
 ///
-/// **`loading` も `failed` も、前の値を持ったまま遷移する。**
-/// 読み直しや失敗のたびに前の値を捨てると、画面は「さっきまで読めていたもの」まで失う。
-/// 捨てるかどうかは画面が決めることで、状態が先に決めてしまうと画面には選択肢が残らない。
+/// **Both `loading` and `failed` carry the previous value across the transition.**
+/// Throwing that value away on every reload or failure costs the screen even the answer it already had.
+/// Whether to drop it is the view's decision; if the state decides first, the view has no choice left.
 ///
-/// ## 画面はこの 3 つで出し分ける
+/// ## A view renders exactly three faces
 ///
 /// ```swift
 /// if let value = store.value {
-///     Content(value)                       // 読み直し中も、失敗した後も、前の答えを出す
-///     if let error = store.error { Banner(error) }   // 失敗は画面を奪わず帯で言う
+///     Content(value)                       // shown during a reload and after a failure alike
+///     if let error = store.error { Banner(error) }   // a failure speaks in a banner, it does not take the screen
 /// } else if let error = store.error {
-///     FailureFace(error)                   // 見せるものが無いときだけ画面を奪う
+///     FailureFace(error)                   // take the screen only when there is nothing to show
 /// } else {
-///     Skeleton()                           // まだ一度も答えを持っていない
+///     Skeleton()                           // no answer has arrived yet
 /// }
 /// ```
 ///
-/// **`isLoading` だけを見て描かないこと。** 読み込み中かどうかは「画面を空にする理由」にならない。
+/// **Do not render from `isLoading` alone.** Being in flight is not a reason to empty the screen.
 public enum AsyncState<Value: Sendable>: Sendable {
-    /// 初期状態（まだ何も頼まれていない）
+    /// Nothing has been asked for yet.
     case idle
 
-    /// ロード中
-    /// - Parameter previous: 直前まで見せていた値（あれば）
+    /// A load is in flight, carrying along whatever was already on screen.
+    /// - Parameter previous: The value shown until now, if there was one.
     case loading(previous: Value?)
 
-    /// ロード成功
-    /// - Parameter value: ロードされた値
+    /// The load finished successfully — the only case that counts as done for a skip-if-loaded check.
+    /// - Parameter value: The value that was loaded.
     case loaded(Value)
 
-    /// ロード失敗
+    /// The load failed, without taking away what was already on screen.
     /// - Parameters:
-    ///   - error: 発生したエラー
-    ///   - previous: 直前まで見せていた値（あれば）。**失敗しても捨てない**
+    ///   - error: The failure that occurred.
+    ///   - previous: The value shown until now, if there was one. **A failure does not discard it**
     case failed(StateError, previous: Value?)
 }
 
 // MARK: - Computed Properties
 
 extension AsyncState {
-    /// いま見せられる値。**どの状態でも「見せるものがあるか」はこれ 1 つで判断する。**
+    /// The value that can be shown right now. **One check answers "is there anything to show" in every state.**
     ///
-    /// 空の配列も辞書も立派な値（「無い」という答え）なので、
-    /// 呼ぶ側が `value?.isEmpty` を「値が無い」と読み替えてはいけない
-    /// —— 読み替えると、0 件の利用者だけが読み直しのたびに骨組みを見ることになる。
+    /// An empty array or dictionary is a real value — the answer "none" — so a caller must never
+    /// read `value?.isEmpty` as "there is no value". Doing so makes users with zero items, and only
+    /// those users, watch a skeleton on every reload.
     public var value: Value? {
         switch self {
         case .idle:
@@ -58,7 +58,6 @@ extension AsyncState {
         }
     }
 
-    /// ロード中かどうか
     public var isLoading: Bool {
         if case .loading = self {
             return true
@@ -66,9 +65,9 @@ extension AsyncState {
         return false
     }
 
-    /// まだ一度も答えを持たないままのロード中か。
+    /// Whether a load is in flight with nothing to show yet.
     ///
-    /// 骨組み（skeleton）を出してよいのはここが true のときだけ。
+    /// A skeleton belongs on screen only while this is true.
     public var isInitialLoading: Bool {
         if case .loading(let previous) = self {
             return previous == nil
@@ -76,9 +75,9 @@ extension AsyncState {
         return false
     }
 
-    /// 前の答えを持ったままのロード中か（読み直し）。
+    /// Whether a load is in flight while the previous value is still shown — a reload.
     ///
-    /// **画面を空にしない。** 前の答えを出したまま静かに差し替える。
+    /// **Do not empty the screen.** Keep the previous answer up and swap it quietly.
     public var isReloading: Bool {
         if case .loading(let previous) = self {
             return previous != nil
@@ -86,7 +85,7 @@ extension AsyncState {
         return false
     }
 
-    /// エラーを取得（failed状態の場合のみ）
+    /// The error from the last load, or nil unless that load failed.
     public var error: StateError? {
         if case .failed(let error, _) = self {
             return error
@@ -94,15 +93,15 @@ extension AsyncState {
         return nil
     }
 
-    /// 見せられる値があるか（`value != nil` と同じ）
+    /// Whether there is anything to show, including a value kept through a reload or a failure.
     public var hasValue: Bool {
         value != nil
     }
 
-    /// 最後のロードが成功して終わっているか（`loaded` そのもの）。
+    /// Whether the last load finished successfully.
     ///
-    /// `hasValue` と違い、失敗して前の値だけが残っている状態は含まない
-    /// —— `loadIfNeeded` が「もう読まなくていい」と判断してよいのはこちら。
+    /// Unlike `hasValue`, this excludes a failure that merely left the previous value behind —
+    /// this is the one `loadIfNeeded` may read as "there is nothing left to fetch".
     public var isLoaded: Bool {
         if case .loaded = self {
             return true
@@ -110,7 +109,6 @@ extension AsyncState {
         return false
     }
 
-    /// 初期状態かどうか
     public var isIdle: Bool {
         if case .idle = self {
             return true
@@ -118,7 +116,6 @@ extension AsyncState {
         return false
     }
 
-    /// 失敗状態かどうか
     public var isFailed: Bool {
         if case .failed = self {
             return true
@@ -130,33 +127,33 @@ extension AsyncState {
 // MARK: - State Transitions
 
 extension AsyncState {
-    /// ロード開始（前の値を持ったまま遷移する）
+    /// Begins a load, carrying the current value across the transition.
     public mutating func startLoading() {
         self = .loading(previous: value)
     }
 
-    /// ロード成功
-    /// - Parameter value: ロードされた値
+    /// Records a successful load, replacing whatever was there.
+    /// - Parameter value: The value that was loaded.
     public mutating func succeed(with value: Value) {
         self = .loaded(value)
     }
 
-    /// ロード失敗（前の値を持ったまま遷移する）
-    /// - Parameter error: 発生したエラー
+    /// Records a failure, carrying the current value across the transition.
+    /// - Parameter error: The failure that occurred.
     public mutating func fail(with error: StateError) {
         self = .failed(error, previous: value)
     }
 
-    /// 取り消された。**失敗にはしない。**
+    /// Ends a load that was called off. **This is not a failure.**
     ///
-    /// 画面を離れた・入力し直したなどで読み込みをやめただけなので、人に見せる失敗ではない。
-    /// 前の答えがあれば戻し、無ければ初期状態へ戻す
-    /// —— ここで何もしないと `loading` のまま取り残され、回りっぱなしの表示になる。
+    /// Leaving the screen or retyping a query merely stops the work; there is nothing to show a person.
+    /// The previous answer comes back if there is one, and otherwise the state returns to idle —
+    /// doing nothing here would strand it in loading, which is exactly the spinner that never stops.
     public mutating func cancelLoading() {
         self = value.map { .loaded($0) } ?? .idle
     }
 
-    /// 初期状態にリセット
+    /// Drops the value and the error, as if nothing had been asked for.
     public mutating func reset() {
         self = .idle
     }

@@ -1,29 +1,29 @@
-# OperationTracker ガイド
+# OperationTracker Guide
 
-複数の並行操作を個別に追跡する方法。
+Following several concurrent operations one by one.
 
 ## Overview
 
-`OperationTracker<Op>`は、複数の並行操作を個別に追跡するための状態管理クラス。
-例えば「データ取得中」と「保存中」を同時に追跡し、それぞれの状態に応じたUIを表示できる。
+``OperationTracker`` tracks several concurrent operations separately, so "fetching" and "saving"
+can be in flight at the same time and each can drive its own part of the UI.
 
-## 基本的な使い方
+## Basic use
 
-### 操作の定義
+### Declaring the operations
 
-追跡したい操作をenumで定義する：
+Describe the operations you want to track as an enum:
 
 ```swift
 enum DataOperation: String, CaseIterable, Sendable {
-    case fetch      // データ取得
-    case save       // 保存
-    case delete     // 削除
+    case fetch
+    case save
+    case delete
 }
 ```
 
-### Storeへの組み込み
+### Attaching it to a store
 
-`@Statable`マクロの`operations`パラメータで操作型を指定する：
+Pass the operation type to `@Statable` through the `operations` argument:
 
 ```swift
 @Statable([Item].self, operations: DataOperation.self)
@@ -33,29 +33,27 @@ final class ItemStore {
 }
 ```
 
-これにより、`operations`プロパティが自動生成される。
+The `operations` property is generated for you. Use `@Track` instead when a store needs a tracker
+that is independent of its value.
 
-## 操作ライフサイクル
+## The lifecycle of an operation
 
-### 手動管理
+### By hand
 
 ```swift
-// 操作開始
 store.operations.start(.fetch)
-
-// 操作完了
 store.operations.complete(.fetch)
-
-// 操作失敗
 store.operations.fail(.fetch, with: error)
 ```
 
-### 自動管理（推奨）
+`start(_:)` also clears the error left over from the operation's last attempt, so a retry does not
+show the previous failure while it runs.
 
-`run`メソッドを使用すると、開始・完了・失敗を自動的に管理できる：
+### Automatically, which is what you usually want
+
+`run(_:task:)` handles starting, completing and failing:
 
 ```swift
-// 基本的な使い方
 let result = await store.operations.run(.fetch) {
     try await api.fetchItems()
 }
@@ -63,75 +61,80 @@ let result = await store.operations.run(.fetch) {
 switch result {
 case .success(let items):
     store.set(items)
-case .failure(let error):
-    // エラーハンドリング（既にoperationsにはエラーが記録されている）
+case .failure:
+    break               // the failure is already recorded on the tracker
+case nil:
+    break               // the task was cancelled, which is not a failure
 }
 ```
 
-### 結果を値に反映する
+The return type is `Result<T, StateError>?`, and `nil` means the task was cancelled. Cancellation
+is deliberately not recorded as a failure: work that was merely called off should not leave a red
+message nobody remembers asking for.
 
-`run` の戻り値（`Result<T, StateError>`）を使って、操作完了後に `store.set(_:)` で値を更新できる：
+### Sending the result straight into the value
 
-```swift
-let result = await store.operations.run(.fetch) {
-    try await api.fetchItems()
-}
-if case .success(let items) = result {
-    store.set(items)
-}
-```
-
-## 状態の確認
-
-### 個別の操作
+`run(_:into:task:)` tracks the operation and lets ``AsyncValue/load(_:)`` own the state
+transitions, so the rules about overlap and cancellation are not written twice. It takes an
+``AsyncValue`` the store owns itself, which pairs with `@Track` rather than with `@Statable`:
 
 ```swift
-// 特定の操作が実行中か
-if store.operations.isActive(.save) {
-    ProgressView("保存中...")
-}
+@MainActor @Observable
+final class ItemStore {
+    let items = AsyncValue<[Item]>()
 
-// 特定の操作のエラー
-if let error = store.operations.error(for: .fetch) {
-    Text("取得エラー: \(error.localizedMessage)")
-}
-```
+    @Track(DataOperation.self) var operations
 
-### 全体の状態
-
-```swift
-// いずれかの操作が実行中か
-if store.operations.hasActiveOperations {
-    // 何らかの処理中
-}
-
-// 実行中の操作一覧
-for operation in store.operations.active {
-    print("\(operation) is running")
-}
-
-// エラーがあるか
-if store.operations.hasErrors {
-    // エラー一覧を表示
-    for (op, error) in store.operations.allErrors {
-        print("\(op): \(error.localizedMessage)")
+    func refresh() async {
+        await operations.run(.fetch, into: items) {
+            try await api.fetchItems()
+        }
     }
 }
 ```
 
-## エラー管理
+## Reading the state
+
+### One operation at a time
 
 ```swift
-// 特定の操作のエラーをクリア
-store.operations.clearError(for: .fetch)
+if store.operations.isActive(.save) {
+    ProgressView("Saving…")
+}
 
-// 全てのエラーをクリア
+if let error = store.operations.error(for: .fetch) {
+    Text(error.localizedMessage)
+}
+```
+
+### Everything at once
+
+```swift
+if store.operations.hasActiveOperations {
+    // something is in flight
+}
+
+for operation in store.operations.active {
+    print("\(operation) is running")
+}
+
+if store.operations.hasErrors {
+    for (operation, error) in store.operations.allErrors {
+        print("\(operation): \(error.localizedMessage)")
+    }
+}
+```
+
+## Clearing errors
+
+```swift
+store.operations.clearError(for: .fetch)
 store.operations.clearAllErrors()
 ```
 
-## 実践的な例
+## A worked example
 
-### CRUDアプリケーション
+### A CRUD screen
 
 ```swift
 enum TodoOperation: String, CaseIterable, Sendable {
@@ -155,8 +158,8 @@ struct TodoListView: View {
 
     var body: some View {
         List {
-            if store.operations.isActive(.fetch) {
-                ProgressView("読み込み中...")
+            if store.isInitialLoading {
+                ProgressView("Loading…")
             }
 
             ForEach(store.value ?? []) { todo in
@@ -181,10 +184,9 @@ struct TodoListView: View {
 }
 ```
 
-### 複数の独立した操作
+### Independent operations in parallel
 
 ```swift
-// 同時に複数の操作を実行
 await withTaskGroup(of: Void.self) { group in
     group.addTask {
         await store.operations.run(.fetchProfile) {
@@ -199,46 +201,49 @@ await withTaskGroup(of: Void.self) { group in
 }
 ```
 
-## ベストプラクティス
+## Best practices
 
-### 操作の粒度
+### Choose the granularity from the UI
 
-UIで個別に状態を表示する必要があるかどうかで粒度を決める：
+Split an operation out when the UI has to show its state separately, and not before:
 
 ```swift
-// 良い例：UIで個別に表示が必要
+// Good: each one drives something visible
 enum GoodOperations {
-    case fetchList      // リスト取得中
-    case saveItem       // アイテム保存中
-    case deleteItem     // アイテム削除中
+    case fetchList
+    case saveItem
+    case deleteItem
 }
 
-// 悪い例：粒度が細かすぎる
+// Bad: the phases of one operation are already tracked for you
 enum BadOperations {
     case fetchListStart
     case fetchListProcess
-    case fetchListComplete  // 状態遷移は自動管理されるべき
+    case fetchListComplete
 }
 ```
 
-### エラーハンドリング
+### Offering a retry
 
 ```swift
-// 操作失敗時のリトライUI
 if let error = store.operations.error(for: .fetch) {
     VStack {
         Text(error.localizedMessage)
-        Button("再試行") {
-            store.operations.clearError(for: .fetch)
-            Task {
-                await store.operations.run(.fetch) { ... }
+        if error.isRetryable {
+            Button("Try again") {
+                Task {
+                    await store.operations.run(.fetch) { try await api.fetchItems() }
+                }
             }
         }
     }
 }
 ```
 
-## 関連項目
+`run(_:task:)` starts by clearing the operation's recorded error, so the message disappears as the
+retry begins without you clearing it yourself.
+
+## See Also
 
 - ``OperationTracker``
 - ``StateError``

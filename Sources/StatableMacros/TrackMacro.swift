@@ -1,16 +1,16 @@
 import SwiftSyntax
 import SwiftSyntaxMacros
 
-/// @Track マクロの実装
+/// The implementation of the `@Track` macro.
 ///
-/// 操作追跡用の `OperationTracker<Operation>` を生成します。
+/// It generates an `OperationTracker<Operation>` to track operations with.
 ///
-/// ## 入力
+/// ## Input
 /// ```swift
 /// @Track(Operation.self) var operations
 /// ```
 ///
-/// ## 展開結果
+/// ## Expansion
 /// ```swift
 /// private let _operations = OperationTracker<Operation>()
 /// var operations: OperationTracker<Operation> {
@@ -21,7 +21,7 @@ public struct TrackMacro: AccessorMacro, PeerMacro {
 
     // MARK: - AccessorMacro
 
-    /// getter を生成
+    /// Generates the getter that reads the generated storage.
     public static func expansion(
         of node: AttributeSyntax,
         providingAccessorsOf declaration: some DeclSyntaxProtocol,
@@ -35,7 +35,7 @@ public struct TrackMacro: AccessorMacro, PeerMacro {
 
         let propertyName = identifier.identifier.text
 
-        // getter を生成
+        // Build the getter.
         let getter = AccessorDeclSyntax(accessorSpecifier: .keyword(.get)) {
             "_\(raw: propertyName)"
         }
@@ -45,7 +45,7 @@ public struct TrackMacro: AccessorMacro, PeerMacro {
 
     // MARK: - PeerMacro
 
-    /// 内部ストレージ (_propertyName) を生成
+    /// Generates the storage the accessor reads from, named after the property with a leading underscore.
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
@@ -59,10 +59,10 @@ public struct TrackMacro: AccessorMacro, PeerMacro {
 
         let propertyName = identifier.identifier.text
 
-        // マクロ引数から Operation 型を抽出
+        // Pull the operation type out of the attribute.
         let operationType = try extractOperationType(from: node)
 
-        // 内部ストレージを生成
+        // Name the storage after the property.
         let storageName = "_\(propertyName)"
 
         return [
@@ -75,16 +75,16 @@ public struct TrackMacro: AccessorMacro, PeerMacro {
 
     // MARK: - Helper Methods
 
-    /// マクロ引数から Operation 型を抽出
+    /// Extracts the operation type from the attribute's arguments.
     private static func extractOperationType(from node: AttributeSyntax) throws -> String {
-        // @Track(Operation.self) から Operation を抽出
+        // Take Operation out of @Track(Operation.self).
         guard let arguments = node.arguments,
               case .argumentList(let argumentList) = arguments,
               let firstArg = argumentList.first else {
             throw TrackMacroError.missingOperationType
         }
 
-        // Operation.self の形式をパース
+        // Parse the Operation.self form.
         let expression = firstArg.expression
 
         // MemberAccessExprSyntax: Operation.self
@@ -94,7 +94,7 @@ public struct TrackMacro: AccessorMacro, PeerMacro {
             return base.trimmedDescription
         }
 
-        // DeclReferenceExprSyntax: 直接の型参照
+        // DeclReferenceExprSyntax: a bare type reference
         if let declRef = expression.as(DeclReferenceExprSyntax.self) {
             return declRef.baseName.text
         }

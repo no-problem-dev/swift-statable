@@ -1,82 +1,78 @@
 import Foundation
 
-/// 状態管理で扱う構造化エラー
+/// A failure sorted into the kinds a screen actually has to act on differently.
 ///
-/// エラーの種類に応じて適切なリカバリー戦略を決定できます。
+/// The case a failure lands in decides how it can be recovered from.
 ///
-/// ## 使用例
+/// ## Example
 ///
 /// ```swift
 /// if let error = store.profile.error {
 ///     Text(error.localizedMessage)
 ///     if error.isRetryable {
-///         Button("再試行") { retry() }
+///         Button("Try again") { retry() }
 ///     }
 /// }
 /// ```
 public enum StateError: Error, Sendable, Equatable, Hashable {
-    /// ネットワークエラー
+    /// A transport failure. Every error in this case is treated as worth retrying.
     case network(NetworkError)
 
-    /// バリデーションエラー
+    /// Input the user has to correct, which retrying on its own will never fix.
     case validation(ValidationError)
 
-    /// リソースが見つからない
     case notFound(resource: String)
 
-    /// 認証エラー
     case unauthorized
 
-    /// サーバーエラー
+    /// A failure the server reported. Codes of 500 and above are treated as worth retrying.
     case server(code: Int, message: String)
 
-    /// 不明なエラー
+    /// A failure that could not be sorted, carrying the description it came with.
     case unknown(String)
 }
 
 // MARK: - NetworkError
 
-/// ネットワーク関連のエラー詳細
+/// The transport failures recognised when converting an error from URLSession.
 public enum NetworkError: Sendable, Equatable, Hashable {
-    /// 接続タイムアウト
     case timeout
 
-    /// ネットワーク未接続
+    /// The device has no usable connection, or the connection was lost mid-flight.
     case noConnection
 
-    /// サーバー到達不可
+    /// The host could not be found, or refused the connection.
     case unreachable
 
-    /// SSL/TLS エラー
+    /// The secure connection could not be established, or the certificate was not trusted.
     case sslError
 
-    /// DNS解決エラー
+    /// The host name could not be resolved.
     case dnsError
 }
 
 // MARK: - ValidationError
 
-/// バリデーション関連のエラー詳細
+/// The ways a single field can be wrong, each carrying the field name so a form can point at it.
 public enum ValidationError: Sendable, Equatable, Hashable {
-    /// 不正な入力
     case invalidInput(field: String, reason: String)
 
-    /// 範囲外の値
+    /// A number outside the range the field accepts, which the message quotes back to the user.
     case outOfRange(field: String, min: Double, max: Double)
 
-    /// 必須フィールドが未入力
+    /// A field that has to be filled in and was left empty.
     case required(field: String)
 
-    /// フォーマット不正
+    /// A value of the right kind written the wrong way, with the shape that was expected.
     case invalidFormat(field: String, expected: String)
 }
 
 // MARK: - Computed Properties
 
 extension StateError {
-    /// リトライ可能かどうか
+    /// Whether offering a retry button makes sense.
     ///
-    /// ネットワークエラーや一時的なサーバーエラーはリトライ可能と判定します。
+    /// Transport failures and server failures of 500 and above are the ones a second attempt can fix.
     public var isRetryable: Bool {
         switch self {
         case .network:
@@ -88,9 +84,10 @@ extension StateError {
         }
     }
 
-    /// ユーザー向けのローカライズされたメッセージ
+    /// A sentence to put in front of the user.
     ///
-    /// 将来的にはLocalizedStringKeyを使用したローカライズに対応予定。
+    /// The text is fixed Japanese and does not go through a string catalog, so an app that ships in
+    /// other languages has to map the case to its own wording rather than show this.
     public var localizedMessage: String {
         switch self {
         case .network(let detail):
@@ -108,7 +105,7 @@ extension StateError {
         }
     }
 
-    /// デバッグ用の詳細説明
+    /// A one-line rendering for logs, naming the case and everything it carries.
     public var debugDescription: String {
         switch self {
         case .network(let detail):
@@ -130,9 +127,9 @@ extension StateError {
 // MARK: - NetworkError Localized Message
 
 extension NetworkError {
-    /// ユーザー向けメッセージ
+    /// A sentence to put in front of the user.
     ///
-    /// - Returns: ネットワークエラーの種類に応じた日本語の説明文字列
+    /// - Returns: A fixed Japanese sentence describing this kind of transport failure.
     public var localizedMessage: String {
         switch self {
         case .timeout:
@@ -152,9 +149,9 @@ extension NetworkError {
 // MARK: - ValidationError Localized Message
 
 extension ValidationError {
-    /// ユーザー向けメッセージ
+    /// A sentence to put in front of the user.
     ///
-    /// - Returns: バリデーションエラーの種類とフィールド名を含む日本語の説明文字列
+    /// - Returns: A fixed Japanese sentence naming the field and what is wrong with it.
     public var localizedMessage: String {
         switch self {
         case .invalidInput(let field, let reason):
@@ -172,16 +169,17 @@ extension ValidationError {
 // MARK: - Convenience Initializers
 
 extension StateError {
-    /// 標準のErrorからStateErrorを生成
+    /// Sorts an arbitrary error into one of these cases.
     ///
-    /// URLErrorなどの既知のエラー型は適切に変換されます。
+    /// A URLError is mapped to the transport failure it describes; anything unrecognised keeps its
+    /// localized description and lands in the unsorted case.
     public init(from error: Error) {
         if let stateError = error as? StateError {
             self = stateError
             return
         }
 
-        // URLError の変換
+        // Map the URLError codes this library recognises.
         if let urlError = error as? URLError {
             switch urlError.code {
             case .timedOut:
