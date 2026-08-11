@@ -9,6 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 None
 
+## [2.0.0] - 2026-08-08
+
+### ⚠️ Breaking Changes
+
+- **State mutation is pinned to the main actor, and the rules for overlap and cancellation are
+  settled.** `AsyncValue.load` was a `nonisolated async` function, so calling it from a
+  `@MainActor` store still moved to the generic executor, and `startLoading()` and `set()` ran
+  there. With another thread writing a value SwiftUI reads on the main thread, a missed
+  Observation invalidation leaves the screen stuck on the last loading state it drew. The note
+  saying it was "assumed to be protected by `@MainActor`" was never a declaration.
+  - `AsyncValue` / `OperationTracker` are `@MainActor`. `@unchecked Sendable` is dropped.
+  - Where loads overlap, the one that started later wins, so an older failure cannot paint over
+    a newer success.
+  - Cancellation is not a failure. It restores the previous answer, so nothing is stranded in
+    loading.
+  - `AsyncState.failed` carries `previous`. `value` returns something to show even after a failure.
+  - Callers must call from `@MainActor`, and the shape of `AsyncState.failed` has changed.
+
+### Added
+
+- `isInitialLoading` / `isReloading` / `isLoaded`, so the condition for showing a skeleton can
+  be derived from the type.
+- `IsolationTests`: watches where mutation actually happens. Removing `@MainActor` fails the test.
+
+### Removed
+
+- `reload` — it behaved identically to `load`.
+- `AsyncStateProvider` / `OperationTrackable` / `ActorIsolation` — nothing conformed to them, and
+  their default implementations quietly returned `nil` and did nothing.
+
+## [1.1.0] - 2026-07-19
+
+### Fixed
+
+- The `@Track` macro was never registered or declared publicly. It is now both.
+- Corrected wrong symbols and wrong usage examples in the DocC documentation.
+
+### Added
+
+- Tests covering every diagnostic emitted when the macro is misused, and tests for `reload`'s
+  behaviour.
+
+### Changed
+
+- Documentation comments and DocC rewritten in Japanese; README unified as a Japanese and
+  English pair.
+- CI workflows synced to the standard SSOT template (tests + release-on-tag; the old
+  auto-release is gone).
+
 ## [1.0.2] - 2026-01-02
 
 ### Changed
@@ -61,7 +110,9 @@ None
 - README.md (Japanese and English)
 - RELEASE_PROCESS.md
 
-[Unreleased]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/no-problem-dev/swift-statable/compare/2.0.0...HEAD
+[2.0.0]: https://github.com/no-problem-dev/swift-statable/compare/1.1.0...2.0.0
+[1.1.0]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.2...1.1.0
 [1.0.2]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/no-problem-dev/swift-statable/releases/tag/v1.0.0
