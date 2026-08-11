@@ -2,7 +2,7 @@
 
 [English](./README.md) | 日本語
 
-SwiftUI向けの宣言的な状態管理マクロ。AsyncValueパターンとOperationTrackerを組み合わせ、非同期状態を型安全に管理する。
+SwiftUI の非同期な読み込み状態を、ストアごとに書き直さなくてよくする。マクロ 1 つで 4 つの状態が手に入り、遅れて返ってきた古い読み込みが新しい結果を上書きすることがない。
 
 ![Swift 6.0+](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![iOS 17+](https://img.shields.io/badge/iOS-17+-blue.svg)

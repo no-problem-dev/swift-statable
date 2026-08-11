@@ -2,7 +2,7 @@
 
 English | [日本語](./README.ja.md)
 
-A declarative state management macro for SwiftUI. Combines the AsyncValue pattern with OperationTracker to manage asynchronous state in a type-safe manner.
+Async loading state for SwiftUI, without writing it again in every store — one macro gives you the four states, and a slow earlier load can never overwrite a newer result.
 
 ![Swift 6.0+](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![iOS 17+](https://img.shields.io/badge/iOS-17+-blue.svg)
