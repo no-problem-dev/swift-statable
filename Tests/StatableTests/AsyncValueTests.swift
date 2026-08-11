@@ -243,6 +243,24 @@ struct AsyncValueTests {
         #expect(!value.isFailed)
     }
 
+    @Test("先に始まった遅いロードの成功が、後から始まった失敗を塗り潰さない")
+    func staleSuccessDoesNotOverwriteFreshFailure() async {
+        // staleFailureDoesNotOverwriteFreshSuccess の逆。
+        // 「後から始まった方が勝つ」が、勝つ側が失敗のときにも成り立つか
+        let value = AsyncValue<Int>()
+
+        async let slow: Void = value.load {
+            try? await Task.sleep(for: .milliseconds(60))
+            return 1
+        }
+        try? await Task.sleep(for: .milliseconds(10))
+        async let fast: Void = value.load { throw TestError.simulated }
+        _ = await (slow, fast)
+
+        #expect(value.isFailed)
+        #expect(value.value == nil)
+    }
+
     @Test("明示的に置いた値は、走っている途中のロードより新しい")
     func explicitSetWinsOverInFlightLoad() async {
         let value = AsyncValue<Int>()

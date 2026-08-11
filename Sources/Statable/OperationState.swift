@@ -37,7 +37,13 @@ import Observation
 public final class OperationTracker<Operation: Hashable & Sendable> {
     // MARK: - State
 
-    private var activeOperations: Set<Operation> = []
+    /// How many runs of each operation are in flight, rather than merely whether any is.
+    ///
+    /// The same operation overlaps itself in ordinary use — a pull-to-refresh landing on top of the
+    /// refresh a screen starts with, a button tapped twice. Holding only a set of keys, the first
+    /// run to return erases the key the second one is still working under, and `isActive` answers
+    /// "no" while the network is still going: the spinner disappears and the screen looks finished.
+    private var activeCounts: [Operation: Int] = [:]
 
     private var errors: [Operation: StateError] = [:]
 
@@ -51,23 +57,43 @@ public final class OperationTracker<Operation: Hashable & Sendable> {
     /// Marks an operation as running and clears the error left over from its last attempt.
     /// - Parameter operation: The operation that is starting.
     public func start(_ operation: Operation) {
-        activeOperations.insert(operation)
+        activeCounts[operation, default: 0] += 1
         errors.removeValue(forKey: operation)
     }
 
-    /// Marks an operation as no longer running, leaving any recorded error untouched.
+    /// Marks one run of an operation as no longer running, leaving any recorded error untouched.
+    ///
+    /// The operation stays active while another run of it is still going.
+    ///
     /// - Parameter operation: The operation that finished.
     public func complete(_ operation: Operation) {
-        activeOperations.remove(operation)
+        endOneRun(of: operation)
     }
 
-    /// Stops tracking an operation as running and records why it failed.
+    /// Stops tracking one run of an operation and records why it failed.
+    ///
+    /// The operation stays active while another run of it is still going; the error is recorded
+    /// either way, so a failure is not lost because a sibling run came back after it.
+    ///
     /// - Parameters:
     ///   - operation: The operation that failed.
     ///   - error: The failure to record.
     public func fail(_ operation: Operation, with error: StateError) {
-        activeOperations.remove(operation)
+        endOneRun(of: operation)
         errors[operation] = error
+    }
+
+    /// Takes one run off an operation's count, dropping the key once none is left.
+    ///
+    /// A `complete` or `fail` with no matching `start` does nothing, so a stray call cannot drive
+    /// the count below zero and leave the operation permanently unable to look active again.
+    private func endOneRun(of operation: Operation) {
+        guard let count = activeCounts[operation] else { return }
+        if count > 1 {
+            activeCounts[operation] = count - 1
+        } else {
+            activeCounts.removeValue(forKey: operation)
+        }
     }
 
     /// Stops tracking an operation as running and records an arbitrary error, converted on the way in.
@@ -81,16 +107,19 @@ public final class OperationTracker<Operation: Hashable & Sendable> {
     // MARK: - Query Methods
 
     public func isActive(_ operation: Operation) -> Bool {
-        activeOperations.contains(operation)
+        activeCounts[operation] != nil
     }
 
     public var hasActiveOperations: Bool {
-        !activeOperations.isEmpty
+        !activeCounts.isEmpty
     }
 
     /// The operations running right now, as a snapshot you can iterate over.
+    ///
+    /// An operation running twice appears once — this answers which operations are going, not how
+    /// many runs of each.
     public var active: Set<Operation> {
-        activeOperations
+        Set(activeCounts.keys)
     }
 
     /// The error left by an operation's last attempt, which its next start clears.

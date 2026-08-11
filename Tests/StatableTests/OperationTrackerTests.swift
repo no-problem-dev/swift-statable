@@ -81,6 +81,64 @@ struct OperationTrackerTests {
         #expect(tracker.isActive(.create))
     }
 
+    // MARK: - 同じ操作が重なって走ったとき
+
+    @Test("同じ操作が二重に走っているとき、先に終わった方だけで追跡は止まらない")
+    func overlappingSameOperationStaysActiveUntilTheLastOne() {
+        let tracker = OperationTracker<TestOperation>()
+
+        tracker.start(.fetch)  // 1 本目（例：画面に出たときの自動更新）
+        tracker.start(.fetch)  // 2 本目（例：その最中に引っぱって更新）
+        tracker.complete(.fetch)  // 1 本目が返ってきた
+
+        // 2 本目はまだ通信している。ここで「走っていない」と答えると、
+        // 通信中なのにぐるぐるが消えて、利用者には終わったように見える
+        #expect(tracker.isActive(.fetch))
+        #expect(tracker.hasActiveOperations)
+        #expect(tracker.active.contains(.fetch))
+
+        tracker.complete(.fetch)
+
+        #expect(!tracker.isActive(.fetch))
+        #expect(!tracker.hasActiveOperations)
+    }
+
+    @Test("二重に走った片方が落ちても、もう片方が走っている間は追跡が続く")
+    func failingOneOfTwoKeepsTheOtherActive() {
+        let tracker = OperationTracker<TestOperation>()
+
+        tracker.start(.create)
+        tracker.start(.create)
+        tracker.fail(.create, with: .network(.timeout))
+
+        #expect(tracker.isActive(.create))
+        #expect(tracker.error(for: .create) == .network(.timeout))
+
+        tracker.complete(.create)
+
+        #expect(!tracker.isActive(.create))
+        // 落ちた事実は、後から返ってきた方に消されない
+        #expect(tracker.error(for: .create) == .network(.timeout))
+    }
+
+    @Test("run が重なっても、最後の 1 本が返るまでは走っていると分かる")
+    func overlappingRunStaysActiveUntilTheLastOne() async {
+        let tracker = OperationTracker<TestOperation>()
+
+        async let slow = tracker.run(.fetch) {
+            try? await Task.sleep(for: .milliseconds(120))
+            return 1
+        }
+        try? await Task.sleep(for: .milliseconds(20))
+        _ = await tracker.run(.fetch) { 2 }
+
+        #expect(tracker.isActive(.fetch), "速い方が返っただけで、遅い方の通信中の表示が消えている")
+
+        _ = await slow
+
+        #expect(!tracker.isActive(.fetch))
+    }
+
     // MARK: - Error Management
 
     @Test("Clear error for specific operation")
