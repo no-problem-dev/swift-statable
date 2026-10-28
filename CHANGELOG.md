@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-28
+
 ### Fixed
 
 - **A store can be created outside the main actor again.** 2.0.0 made `AsyncValue` and
