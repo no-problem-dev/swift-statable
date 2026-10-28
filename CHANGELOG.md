@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A store can be created outside the main actor again.** 2.0.0 made `AsyncValue` and
+  `OperationTracker` `@MainActor`, and with them their initializers. The storage `@Statable`
+  generates is created where the store is, so a store with a `nonisolated init()` no longer
+  compiled ("return from initializer without initializing all stored properties"). That is the
+  shape SwiftUI asks for when a store is the default value of an environment entry
+  (`@Entry var store: Store = .init()`), whose default is evaluated outside any actor. The
+  initializers of both types are `nonisolated` now. Creating one touches nothing shared; every
+  state change after that still happens on the main actor.
+
 ## [2.0.1] - 2026-08-11
 
 None
