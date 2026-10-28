@@ -50,20 +50,28 @@ public final class AsyncValue<Value: Sendable> {
     // MARK: - Initialization
 
     /// Creates a container that has not been asked for anything yet.
-    public init() {
-        self.state = .idle
+    ///
+    /// `nonisolated` so a store can be created where no actor is guaranteed — most often the
+    /// default value of a SwiftUI environment entry. Creating it touches nothing shared; every
+    /// write after that still happens on the main actor.
+    ///
+    /// The initializers write the storage `@Observable` keeps behind ``state``, not ``state``
+    /// itself: the property's init accessor is main-actor isolated, and nothing observes a value
+    /// that is still being created.
+    nonisolated public init() {
+        self._state = .idle
     }
 
     /// Creates a container that already holds a value, as if a load had just succeeded.
     /// - Parameter initialValue: The value to start from.
-    public init(initialValue: Value) {
-        self.state = .loaded(initialValue)
+    nonisolated public init(initialValue: Value) {
+        self._state = .loaded(initialValue)
     }
 
     /// Creates a container that starts in a state you choose.
     /// - Parameter state: The state to start in.
-    public init(state: AsyncState<Value>) {
-        self.state = state
+    nonisolated public init(state: AsyncState<Value>) {
+        self._state = state
     }
 
     // MARK: - Computed Properties

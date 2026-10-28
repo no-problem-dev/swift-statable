@@ -50,7 +50,9 @@ public final class OperationTracker<Operation: Hashable & Sendable> {
     // MARK: - Initialization
 
     /// Creates a tracker with nothing running and no errors recorded.
-    public init() {}
+    ///
+    /// `nonisolated` for the same reason as ``AsyncValue/init()``.
+    nonisolated public init() {}
 
     // MARK: - Operation Management
 
