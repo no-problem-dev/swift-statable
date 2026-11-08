@@ -125,9 +125,9 @@ struct ItemListView: View {
 ## ドキュメント
 
 API リファレンスとガイドは
-[GitHub Pages](https://no-problem-dev.github.io/swift-statable/documentation/statable/) にある。
+DocC カタログ [`Sources/Statable/Documentation.docc`](Sources/Statable/Documentation.docc) にある。
 設計の理由は
-[Design Principles](https://no-problem-dev.github.io/swift-statable/documentation/statable/designprinciples)
+[Design Principles](Sources/Statable/Documentation.docc/DesignPrinciples.md)
 を参照。
 
 ## インストール
