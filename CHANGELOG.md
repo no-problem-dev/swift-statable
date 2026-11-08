@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-11-08
+
+### Changed
+
+- swift-docc-plugin への依存を外した（DocC は Xcode で開く）
+
 ## [3.0.0] - 2026-10-28
 
 ### Fixed
@@ -125,7 +131,8 @@ None
 - README.md (Japanese and English)
 - RELEASE_PROCESS.md
 
-[Unreleased]: https://github.com/no-problem-dev/swift-statable/compare/2.0.0...HEAD
+[Unreleased]: https://github.com/no-problem-dev/swift-statable/compare/3.0.1...HEAD
+[3.0.1]: https://github.com/no-problem-dev/swift-statable/compare/3.0.0...3.0.1
 [2.0.0]: https://github.com/no-problem-dev/swift-statable/compare/1.1.0...2.0.0
 [1.1.0]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.2...1.1.0
 [1.0.2]: https://github.com/no-problem-dev/swift-statable/compare/v1.0.1...v1.0.2
